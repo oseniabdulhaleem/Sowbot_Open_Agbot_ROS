@@ -27,13 +27,6 @@ def generate_launch_description():
         )
     )
 
-    # Include the camera system launch file
-    camera_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_dir, 'launch', 'camera_system.launch.py')
-        )
-    )
-
     # Include the UI launch file
     ui_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -44,6 +37,5 @@ def generate_launch_description():
     return LaunchDescription([
         gnss_launch,
         basekit_driver_launch,
-        camera_launch,
         ui_launch
     ])

@@ -1,11 +1,11 @@
-from launch import LaunchDescription
+from launch import LaunchDescription  # type: ignore
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     return LaunchDescription([
         Node(
-            package='example_ui',
+            package='basekit_ui',
             executable='ui_node.py',
             name='ui_node',
             output='screen',

@@ -22,24 +22,23 @@ RUN apt-get update && apt-get install -y \
         git \
         nano \
         wget \
+        unzip \
         iputils-ping
 
 # Setup lizard
 RUN mkdir -p /root/.lizard && \
     cd /root && \
-    git clone https://github.com/zauberzeug/lizard.git && \
-    cp lizard/flash.py /root/.lizard/flash.py && \
-    cp lizard/esp.py /root/.lizard/esp.py && \
-    chmod +x /root/.lizard/flash.py && \
-    cd lizard && \
+    LATEST_VERSION=$(curl -s https://api.github.com/repos/zauberzeug/lizard/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")') && \
+    wget https://github.com/zauberzeug/lizard/releases/download/${LATEST_VERSION}/lizard_firmware_and_devtools_${LATEST_VERSION}.zip && \
+    unzip lizard_firmware_and_devtools_${LATEST_VERSION}.zip -d /root/.lizard && \
+    chmod +x /root/.lizard/espresso.py && \
+    cd /root/.lizard && \
     pip install -r requirements.txt && \
-    cd .. && \
+    cd /root && \
+    rm -f lizard_firmware_and_devtools_${LATEST_VERSION}.zip && \
     echo "export PYTHONPATH=/root/.lizard:$PYTHONPATH" >> /root/.bashrc
 
-# https://github.com/zauberzeug/nicegui/issues/2354
-RUN python3 -m pip install fastapi==0.108.0
-RUN python3 -m pip install setuptools==58.2.0
-RUN python3 -m pip install nicegui
+RUN pip install -r requirements-dev.txt
 
 COPY ./docker/bashrc /tmp/bashrc
 RUN cat /tmp/bashrc >> /root/.bashrc && rm -f /tmp/bashrc
@@ -47,12 +46,12 @@ RUN cat /tmp/bashrc >> /root/.bashrc && rm -f /tmp/bashrc
 # Copy ROS packages
 COPY ./basekit_driver /workspace/src/basekit_driver
 COPY ./basekit_launch /workspace/src/basekit_launch
-COPY ./exampleui /workspace/src/example_ui
+COPY ./basekit_ui /workspace/src/basekit_ui
 
 # Build ROS packages
 WORKDIR /workspace
 RUN . /opt/ros/humble/setup.sh && \
-    colcon build --packages-select basekit_driver basekit_launch example_ui --symlink-install && \
+    colcon build --packages-select basekit_driver basekit_launch basekit_ui --symlink-install && \
     . install/setup.sh
 
 WORKDIR /workspace
