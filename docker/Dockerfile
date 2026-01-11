@@ -50,6 +50,9 @@ RUN apt-get install -y --no-install-recommends \
         ros-humble-foxglove-msgs \
         ros-humble-tf-transformations \
         ros-humble-septentrio-gnss-driver \
+        ros-humble-navigation2 \
+        ros-humble-nav2-bringup \
+        ros-humble-diagnostic-updater \
         ros-humble-usb-cam \
         ros-humble-image-transport \
         ros-humble-image-transport-plugins \
@@ -80,9 +83,10 @@ RUN pip install -r /root/requirements-dev.txt
 COPY ./basekit_driver /workspace/src/basekit_driver
 COPY ./basekit_launch /workspace/src/basekit_launch
 COPY ./basekit_ui /workspace/src/basekit_ui
+COPY ./automatepro_gnss_driver /workspace/src/automatepro_gnss_driver
 
 # Build ROS packages
 WORKDIR /workspace
 RUN . /opt/ros/humble/setup.sh && \
-    colcon build --packages-select basekit_driver basekit_launch basekit_ui --symlink-install && \
+    colcon build --symlink-install && \
     . install/setup.sh
