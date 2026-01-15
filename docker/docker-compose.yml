@@ -1,23 +1,31 @@
 services:
   basekit:
+    build:
+      context: ../../../
+      dockerfile: src/Open_agbot_devkit_ros/docker/Dockerfile
     image: agroecology/open_agbot:latest
     container_name: open_agbot_basekit
     privileged: true
     network_mode: host
     restart: unless-stopped
+    
+    # Allows the container to access serial ports
     group_add:
       - dialout
+
+    # Mapping ports with environment overrides
+    # For ThinkPad, we set these in simple.py or a .env file
     devices:
-      - "/dev/ttyACM0:/dev/ttyTHS0"
-      - "/dev/ttyACM1:/dev/ttyACM1"
+      - "${CONTROLLER_PORT:-/dev/ttyTHS0}:/dev/ttyTHS0"
+      - "${GPS_PORT:-/dev/ttyS31}:/dev/ttyACM1"
+
     volumes:
       - /dev:/dev
-      # We map the local config so we can modify it easily
+      # Mount the local config so changes on the host reflect in the container
       - ../basekit_launch/config:/workspace/install/basekit_launch/share/basekit_launch/config
+
     environment:
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - PYTHONUNBUFFERED=1
-      # THESE FLAGS TELL THE SYSTEM TO SKIP JETSON-ONLY HARDWARE:
-      - LAUNCH_CAMERA=false
-      - USE_LIZARD=true
-      - HW_PLATFORM=laptop
+      # Default to laptop mode if not specified
+      - HW_PLATFORM=${HW_PLATFORM:-laptop}
