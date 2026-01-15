@@ -34,7 +34,7 @@ RUN for i in {1..5}; do apt-get update && break || sleep 5; done && \
     ros-humble-twist-mux \
     # Middleware (CycloneDDS & Iceoryx)
     ros-humble-rmw-cyclonedds-cpp \
-    iceoryx-binding-c iceoryx-hoofs iceoryx-posh && \
+    ros-humble-iceoryx-binding-c ros-humble-iceoryx-hoofs ros-humble-iceoryx-posh && \
     rm -rf /var/lib/apt/lists/*
 
 # 4. Lizard Espresso Firmware & Devtools
