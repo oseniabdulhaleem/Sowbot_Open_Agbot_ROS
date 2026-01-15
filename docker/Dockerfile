@@ -9,7 +9,7 @@ ENV PYTHONPATH="/root/.lizard"
 # 2. Hardening Apt & Installing Base Tools
 # We switch to the Azure mirror for better reliability during ROS buildfarm syncs
 RUN sed -i 's/archive.ubuntu.com/azure.archive.ubuntu.com/g' /etc/apt/sources.list && \
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update && apt-get install -y --fix-missing --no-install-recommends \
     wget curl ca-certificates unzip git nano python3-pip software-properties-common && \
     add-apt-repository universe && \
     apt-get update
@@ -18,7 +18,7 @@ RUN sed -i 's/archive.ubuntu.com/azure.archive.ubuntu.com/g' /etc/apt/sources.li
 # We split the install to ensure that if a ROS mirror is syncing, 
 # we can retry specific packages without failing the whole build.
 RUN for i in {1..5}; do apt-get update && break || sleep 5; done && \
-    apt-get install -y --no-install-recommends \
+    apt-get install -y --fix-missing --no-install-recommends \
     # Hardware Communication
     python3-serial udev libasio-dev \
     # ROS Build Tools
@@ -46,9 +46,6 @@ RUN mkdir -p /root/.lizard && cd /root && \
     chmod +x /root/.lizard/espresso.py
 
 # 5. Core Python Dependencies (NiceGUI / AgBot Stack)
-RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip3 install --no-cache-dir nicegui pyserial requests pyyaml
-
 # 6. Workspace Setup
 WORKDIR /workspace
 # Copy the source code from the local context
