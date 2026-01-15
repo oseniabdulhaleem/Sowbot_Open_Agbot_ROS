@@ -1,31 +1,23 @@
 services:
   basekit:
-    build:
-      context: ../../../
-      dockerfile: src/Open_agbot_devkit_ros/docker/Dockerfile
     image: agroecology/open_agbot:latest
     container_name: open_agbot_basekit
     privileged: true
     network_mode: host
     restart: unless-stopped
-    
-    # Ensures the container has the same serial permissions as your 'dialout' group
     group_add:
       - dialout
-
-    # Mapping your ThinkPad's physical USB ports to the robot's expected internal paths
     devices:
-      - "/dev/ttyACM0:/dev/ttyTHS0"  # ESP32/Lizard mapped to the 'Jetson' port
-      - "/dev/ttyACM1:/dev/ttyACM1"  # RTK GPS port
-
+      - "/dev/ttyACM0:/dev/ttyTHS0"
+      - "/dev/ttyACM1:/dev/ttyACM1"
     volumes:
       - /dev:/dev
-      # Persistent storage for logs or local parameter overrides if needed
-      - ./config:/workspace/install/basekit_launch/share/basekit_launch/config
-
+      # We map the local config so we can modify it easily
+      - ../basekit_launch/config:/workspace/install/basekit_launch/share/basekit_launch/config
     environment:
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - PYTHONUNBUFFERED=1
-      # Explicitly telling NiceGUI to bind to all interfaces for the WebUI
-      - HOST=0.0.0.0 
-      - PORT=8080
+      # THESE FLAGS TELL THE SYSTEM TO SKIP JETSON-ONLY HARDWARE:
+      - LAUNCH_CAMERA=false
+      - USE_LIZARD=true
+      - HW_PLATFORM=laptop
