@@ -1,6 +1,5 @@
 import os
 from glob import glob
-
 from setuptools import setup
 
 package_name = 'basekit_ui'
@@ -24,7 +23,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'ui_node = basekit_ui.ui_node:main',
+            # CHANGED: Match the executable name expected by basekit.launch.py
+            'basekit_ui_node = basekit_ui.ui_node:main',
         ],
     },
 )
