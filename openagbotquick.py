@@ -2,49 +2,66 @@ import os
 import subprocess
 import sys
 
-# --- CONFIGURATION ---
-REPO_URL = "https://github.com/Agroecology-Lab/Open_agbot_devkit_ros"
-DOCKER_DIR = "docker"
-
-# ThinkPad Hardware Overrides
-os.environ["CONTROLLER_PORT"] = "/dev/ttyACM0"
-os.environ["GPS_PORT"] = "/dev/ttyACM1"
-os.environ["HW_PLATFORM"] = "laptop"
-
-def run_cmd(cmd):
-    print(f">> Executing: {cmd}")
+def run_cmd(cmd, description, can_fail=False):
+    print(f"\n🚀 {description}...")
     try:
-        subprocess.run(cmd, shell=True, check=True)
+        # We use shell=True to handle wildcards and piping
+        subprocess.run(cmd, shell=True, check=not can_fail)
     except subprocess.CalledProcessError as e:
-        print(f"❌ Error executing command: {e}")
-        sys.exit(1)
+        if not can_fail:
+            print(f"❌ ERROR during: {description}")
+            print(f"Details: {e}")
+            sys.exit(1)
+        else:
+            print(f"⚠️  WARNING: {description} failed (non-critical).")
 
 def main():
-    print("🚀 Starting Open AgBot Setup on ThinkPad X1...")
+    print("--- 🤖 Open AgBot DevKit Proper Setup ---")
 
-    # 1. Hardware Permissions
-    print("🔓 Unlocking serial ports...")
-    run_cmd("sudo chmod 666 /dev/ttyACM0 /dev/ttyACM1")
+    # 1. Unlock Hardware Ports
+    # can_fail=True because devkits might not be plugged in during software-only testing
+    run_cmd("sudo chmod 666 /dev/ttyACM* || true", "Unlocking serial ports", can_fail=True)
 
-    # 2. Update Code
-    print("📥 Pulling latest changes from GitHub...")
-    run_cmd("git pull")
+    # 2. Fix setup.py naming mismatch
+    # Ensures ROS finds 'basekit_ui_node' even if the file is named 'ui_node.py'
+    setup_py_path = "src/basekit_ui/setup.py"
+    if os.path.exists(setup_py_path):
+        cmd = "sed -i \"s/['\\\"]ui_node.*=['\\\"]/ 'basekit_ui_node =/g\" " + setup_py_path
+        run_cmd(cmd, "Correcting entry_points in setup.py")
 
-    # 3. Build and Launch
-    print("🏗️  Building and starting Docker containers...")
-    # Using environment variables to inject ThinkPad ports into docker-compose
-    run_cmd(f"docker-compose -f {DOCKER_DIR}/docker-compose.yml down")
-    run_cmd(f"docker-compose -f {DOCKER_DIR}/docker-compose.yml up -d --build")
+    # 3. Fix Shebang & Line Endings (The 'OSError 8' killer)
+    ui_node_path = "src/basekit_ui/basekit_ui/ui_node.py"
+    if os.path.exists(ui_node_path):
+        run_cmd(f"sed -i '1s|^.*$|#!/usr/bin/env python3|' {ui_node_path}", "Injecting Python Shebang")
+        run_cmd(f"chmod +x {ui_node_path}", "Making UI node executable")
+        run_cmd(f"sed -i 's/\\r$//' {ui_node_path}", "Removing Windows line endings")
 
-    print("\n" + "="*40)
-    print("✅ SYSTEM READY")
-    print("="*40)
-    print(f"🌐 WebUI:    http://localhost:8080")
-    print(f"🐳 Portainer: http://localhost:9000")
-    print("="*40)
-    
-    print("\n💡 DEV TIP: Open this folder in VS Code and install the 'Remote - Containers' extension.")
-    print("   Attach to 'open_agbot_basekit' to edit and debug code live inside the robot!")
+    # 4. Deep Clean
+    # Uses sudo to wipe root-owned build files from previous Docker runs
+    run_cmd("sudo rm -rf build/ install/ log/", "Wiping old build artifacts with sudo")
+
+    # 5. Docker Image Build
+    run_cmd("docker-compose -f docker/docker-compose.yml build", "Building Docker image")
+
+    # 6. INTERNAL WORKSPACE BUILD (The Mission Critical Step)
+    # We use --entrypoint '' to bypass the container's internal setup.bash check.
+    # This allows us to create the install folder that the container usually expects.
+    build_cmd = (
+        "docker-compose -f docker/docker-compose.yml run --rm "
+        "--entrypoint '' "
+        "basekit /bin/bash -c "
+        "\"source /opt/ros/humble/setup.bash && colcon build --symlink-install\""
+    )
+    run_cmd(build_cmd, "Compiling ROS 2 workspace inside container")
+
+    # 7. Start the Background Services
+    run_cmd("docker-compose -f docker/docker-compose.yml up -d", "Launching AgBot Background Services")
+
+    print("\n" + "="*50)
+    print("✅ SUCCESS: Robot software is running!")
+    print("🌎 ACCESS WEB UI: http://localhost:8080")
+    print("📋 VIEW LOGS:     docker logs -f open_agbot_basekit")
+    print("="*50)
 
 if __name__ == "__main__":
     main()
