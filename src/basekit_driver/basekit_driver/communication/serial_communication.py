@@ -83,7 +83,7 @@ class SerialCommunication(Communication):
                 node.declare_parameter(
                     'read_data.' + data + '.default',
                     rclpy.Parameter.Type.INTEGER)
-            elif type_str == 'double':
+            elif type_str == 'double' or type_str == 'float':
                 node.declare_parameter('read_data.' + data + '.default', rclpy.Parameter.Type.DOUBLE)
             default = node.get_parameter('read_data.' + data + '.default').value
             self._core_data_list.append(CoreData(data, pos, type_str, default))

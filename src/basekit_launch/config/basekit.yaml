@@ -6,7 +6,7 @@
 controller:
   ros__parameters:
     # UPDATED: Matches your Espressif device
-    port: "/dev/ttyACM0"
+    serial_port: "/dev/ttyACM0"
     baudrate: 115200
     base_frame: "base_link"
     odom_frame: "odom"
@@ -19,7 +19,7 @@ controller:
         - "motor_status"
       v_batt:
         default: 0.0
-        type: "float"
+        type: "double"
       motor_status:
         default: 0
         type: "int"

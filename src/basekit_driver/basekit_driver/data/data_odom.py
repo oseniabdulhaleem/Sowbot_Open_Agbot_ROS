@@ -17,8 +17,12 @@ class DataOdom:
         self._odom = Odometry()
         self._odom.header.frame_id = 'odom'
         self._odom.child_frame_id = 'base_link'
-        self._odom.pose.covariance = covariance_pose
-        self._odom.twist.covariance = covariance_twist
+        # Fixed by fix.py: Ensure 6x6 matrix (36 elements)
+        cov_list = list(covariance_pose)
+        self._odom.pose.covariance = cov_list + [0.0] * (36 - len(cov_list))
+        # Fixed by fix.py: Ensure 6x6 matrix (36 elements)
+        twist_list = list(covariance_twist)
+        self._odom.twist.covariance = twist_list + [0.0] * (36 - len(twist_list))
         self._last_time = None
 
     def update_data(self, current_time: Time, linear_speed: float, angular_speed: float):
