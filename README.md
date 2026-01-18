@@ -26,7 +26,7 @@ Clone the repository to your local machine:
    ```
 ---
 
-## Quick Start Sequence
+## Quick Start 
 
 Follow these steps to initialize the robot:
 
@@ -39,9 +39,6 @@ Follow these steps to initialize the robot:
 3. **Initial Setup**
 Run once on new systems. This is the automated installer designed to configure a fresh Linux installation for the Agbot environment.
 
-* **Function:** Checks for and installs system-level dependencies (Docker, Git, Python3, Pip) and pulls the latest base images from Docker Hub.
-* **Output:** Configures user groups (adding the user to 'docker' and 'dialout') and initializes the ROS 2 workspace structure.
-* **Usage:** `
 ```
 python3 openagbotquick.py
 ```
@@ -51,7 +48,7 @@ python3 openagbotquick.py
 python3 openagbot-dev.py
 ```
 
-5. **Access UI: Open a web browser on the host machine and navigate to http://localhost:8080.**
+5. Access UI: Open a web browser on the host machine and navigate to http://localhost:8080.
    
 
 # Open Agbot Helper Scripts detail
@@ -94,14 +91,6 @@ The `git.sh` script is a utility designed to standardize the workflow for the Op
 ```
 ./git.sh -dev your commit message
 ```
-
-
-### Quick Start
-
-**Push to the main branch:**
-```bash
-./git.sh "Fixed motor controller timeout"
-
 
 ## Components
 
