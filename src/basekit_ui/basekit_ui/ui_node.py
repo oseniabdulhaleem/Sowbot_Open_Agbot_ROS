@@ -1,33 +1,37 @@
-import sys
-import os
-
-# PATH INJECTION: Force Python to see ROS 2 Humble
-ros_path = '/opt/ros/humble/lib/python3.10/site-packages'
-if ros_path not in sys.path:
-    sys.path.append(ros_path)
-
 import rclpy
+from rclpy.node import Node
 from nicegui import ui
 import threading
+import sys
 
-class NiceGuiNode:
+class NiceGuiNode(Node):
     def __init__(self):
-        from rclcpp.node import Node
-        self.node = Node('web_ui')
+        super().__init__('web_ui')
         
         @ui.page('/')
         def main_page():
-            ui.label('AgBot Dashboard').classes('text-h4')
-            ui.button('TEST LOG', on_click=lambda: self.node.get_logger().info('UI Click!'))
-
-    def ros_main(self):
-        rclpy.spin(self.node)
+            ui.dark_mode().enable()
+            with ui.column().classes('w-full items-center q-pa-md'):
+                ui.label('AgBot Control Panel').classes('text-h3 text-primary font-bold')
+                
+                with ui.card().classes('q-pa-lg bg-grey-9'):
+                    ui.label('System Status').classes('text-h5 text-white')
+                    ui.separator()
+                    ui.label('GPS: Connected').classes('text-green text-subtitle1')
+                    ui.label('MCU: Connected').classes('text-green text-subtitle1')
+                    
+                ui.button('TEST ROS LOG', 
+                          on_click=lambda: self.get_logger().info('NiceGUI interaction success!'),
+                          color='primary').classes('q-mt-md')
 
 def main(args=None):
     rclpy.init(args=args)
-    gui_node = NiceGuiNode()
-    t = threading.Thread(target=gui_node.ros_main, daemon=True)
-    t.start()
+    node = NiceGuiNode()
+    
+    # Run ROS in background
+    threading.Thread(target=lambda: rclpy.spin(node), daemon=True).start()
+    
+    # Start web server
     ui.run(port=8080, show=False, reload=False)
 
 if __name__ == '__main__':
