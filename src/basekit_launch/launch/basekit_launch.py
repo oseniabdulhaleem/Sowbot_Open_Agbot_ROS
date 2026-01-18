@@ -1,19 +1,23 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.actions import Node, PushRosNamespace
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
 from launch.conditions import IfCondition
 
 def generate_launch_description():
+    # 0. Fetch dynamic ports from environment (mapped by fixusb.py)
+    # Defaulting to common paths if variables are missing
+    gps_port = os.environ.get('GPS_PORT', '/dev/ttyACM0')
+    mcu_port = os.environ.get('MCU_PORT', '/dev/ttyACM1')
+
     # 1. Paths to configs
     basekit_launch_dir = get_package_share_directory('basekit_launch')
     config_file = os.path.join(basekit_launch_dir, 'config', 'basekit.yaml')
 
     # 2. Declare Launch Arguments
-    # This allows you to run: ros2 launch basekit_launch basekit.launch.py use_camera:=false
     declare_use_camera = DeclareLaunchArgument(
         'use_camera', default_value='false',
         description='Whether to launch the Axis IP camera node'
@@ -25,30 +29,32 @@ def generate_launch_description():
     )
 
     # 3. Basekit Driver Node (The ESP32/Lizard controller)
-    # Added parameter to pass the hardware platform to the driver
+    # Added 'port' parameter to use detected MCU_PORT
     basekit_driver_node = Node(
         package='basekit_driver',
         executable='basekit_driver_node',
         name='controller',
         output='screen',
         parameters=[config_file, {
-            'hw_platform': LaunchConfiguration('hw_platform')
+            'hw_platform': LaunchConfiguration('hw_platform'),
+            'port': mcu_port  # Dynamically assigned
         }],
         remappings=[('/cmd_vel', '/cmd_vel_nav')]
     )
 
     # 4. GPS Node (u-blox)
+    # We pass the GPS_PORT as an argument to the included launch file
     ublox_gps_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(get_package_share_directory('ublox_gps'), 'launch', 'ublox_gps_node-launch.py')
         ),
         launch_arguments={
-            'params_file': config_file
+            'params_file': config_file,
+            'device': gps_port  # Overrides the device path in the yaml
         }.items()
     )
 
-    # 5. Static Transforms (IMU, GPS, etc.)
-    # These match your logs showing tf_base_link_imu, etc.
+    # 5. Static Transforms
     static_tf_nodes = [
         Node(package='tf2_ros', executable='static_transform_publisher', name='tf_base_link_imu',
              arguments=['0', '0', '0', '0', '0', '0', '1', 'base_link', 'imu']),
@@ -59,7 +65,6 @@ def generate_launch_description():
     ]
 
     # 6. Optional Axis Camera Node
-    # Wrap in IfCondition so it doesn't crash if package is missing
     axis_camera_node = Node(
         package='axis_camera',
         executable='axis_camera_node',

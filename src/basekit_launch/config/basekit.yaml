@@ -2,6 +2,7 @@
   ros__parameters:
     hw_platform: laptop
     use_axis_camera: false
+
 controller:
   ros__parameters:
     base_frame: base_link
@@ -10,8 +11,8 @@ controller:
     publish_tf: true
     read_data:
       list:
-      - v_batt
-      - motor_status
+        - v_batt
+        - motor_status
       motor_status:
         default: 0
         type: int
@@ -19,45 +20,30 @@ controller:
         default: 0.0
         type: double
     robot_type: lizard
-    serial_port: /dev/ttyACM0
+    # This is now overridden by fixusb.py, but updated here for consistency
+    serial_port: /dev/ttyACM1 
     use_lizard: true
+
 tf_base_link_imu:
   ros__parameters:
-    rotation:
-    - 0.0
-    - 0.0
-    - 0.0
-    - 1.0
-    translation:
-    - 0.0
-    - 0.0
-    - 0.0
+    rotation: [0.0, 0.0, 0.0, 1.0]
+    translation: [0.0, 0.0, 0.0]
+
 tf_imu_gnss:
   ros__parameters:
-    rotation:
-    - 0.0
-    - 0.0
-    - 0.0
-    - 1.0
-    translation:
-    - 0.0
-    - 0.0
-    - 0.0
+    rotation: [0.0, 0.0, 0.0, 1.0]
+    translation: [0.0, 0.0, 0.0]
+
 tf_imu_vsm:
   ros__parameters:
-    rotation:
-    - 0.0
-    - 0.0
-    - 0.0
-    - 1.0
-    translation:
-    - 0.0
-    - 0.0
-    - 0.0
+    rotation: [0.0, 0.0, 0.0, 1.0]
+    translation: [0.0, 0.0, 0.0]
+
 ublox_gps_node:
   ros__parameters:
-    baudrate: 460800
-    device: /dev/ttyACM1
+    # Lowered from 460800 to 115200 to resolve ASIO Buffer Read Errors
+    baudrate: 115200
+    device: /dev/ttyACM0
     dgnss_mode: 3
     frame_id: gps
     gnss:
@@ -74,7 +60,8 @@ ublox_gps_node:
         pvt: true
         sat: true
     uart1:
-      baudrate: 460800
+      baudrate: 115200
+
 web_ui:
   ros__parameters:
     host: 0.0.0.0

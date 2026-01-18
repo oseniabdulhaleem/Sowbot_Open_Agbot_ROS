@@ -1,51 +1,48 @@
 import os
+import shutil
 
-ws_path = os.path.expanduser("~/open_agbot_ws")
-ui_file = os.path.join(ws_path, "src/basekit_ui/basekit_ui/ui_node.py")
-# The script causing the GPIO crash
-espresso_file = "/root/.lizard/espresso.py" 
-
-def patch_gpio_for_laptop():
-    """Mocks GPIO writes so the driver doesn't crash on non-Jetson hardware."""
-    if not os.path.exists(espresso_file):
-        print(f"⚠️ {espresso_file} not found. If this is in the container, we will patch it via a wrapper.")
+def repair_setup_py():
+    workspace = os.path.expanduser("~/open_agbot_ws")
+    setup_py = os.path.join(workspace, "src/basekit_launch/setup.py")
+    
+    if not os.path.exists(setup_py):
+        print(f"Error: Could not find {setup_py}")
         return
 
-    print("🛠 Patching espresso.py to ignore missing GPIO files...")
-    with open(espresso_file, 'r') as f:
-        content = f.read()
-    
-    # Wrap the write_gpio function in a try-except block
-    buggy_code = "Path(f'/sys/class/gpio/{path}').write_text(f'{value}\\n', encoding='utf-8')"
-    safe_code = "try:\n        " + buggy_code + "\n    except FileNotFoundError:\n        print(f'MOCK GPIO: {path} -> {value}')"
-    
-    if buggy_code in content and "try:" not in content:
-        content = content.replace(buggy_code, safe_code)
-        with open(espresso_file, 'w') as f:
-            f.write(content)
+    print("--- Starting path correction for basekit_launch ---")
 
-def patch_ui_threading():
-    """Forces NiceGUI elements to be created only when a page is requested."""
-    print("🛠 Fixing NiceGUI Threading context...")
-    with open(ui_file, 'r') as f:
+    with open(setup_py, 'r') as f:
         lines = f.readlines()
 
-    new_lines = []
-    for line in lines:
-        # We need to move the UI element creation into the @ui.page or ensure it has a target
-        if "self.setup_ui()" in line: # Assuming a setup function exists
-             new_lines.append(line)
-        elif "with ui." in line and "__init__" in line:
-            # Wrap standard element creation to prevent background thread crashes
-            new_lines.append("        # Thread-safe wrap\n")
-            new_lines.append(line.replace("with ui.", "with ui.element('div'): # "))
-        else:
-            new_lines.append(line)
+    updated_lines = []
+    changed = False
 
-    with open(ui_file, 'w') as f:
-        f.writelines(new_lines)
+    for line in lines:
+        # Check for the nested path entry
+        # Looks for (os.path.join('share', package_name, 'launch')
+        if "os.path.join('share', package_name, 'launch')" in line:
+            # Replace it with the flat path entry
+            new_line = line.replace("'share', package_name, 'launch'", "'share', package_name")
+            updated_lines.append(new_line)
+            changed = True
+            print("Action: Fixed nested launch directory mapping.")
+        else:
+            updated_lines.append(line)
+
+    if changed:
+        with open(setup_py, 'w') as f:
+            f.writelines(updated_lines)
+    else:
+        print("Notice: setup.py path already appears correct or entry not found.")
+
+    # Clean build folders to force the new configuration to take effect
+    print("Action: Clearing build, install, and log folders...")
+    for folder in ['build', 'install', 'log']:
+        path = os.path.join(workspace, folder)
+        if os.path.exists(path):
+            shutil.rmtree(path)
+
+    print("--- Repair complete. Run: python3 openagbot-dev.py ---")
 
 if __name__ == "__main__":
-    patch_gpio_for_laptop()
-    patch_ui_threading()
-    print("✅ Patches applied. Please run a fresh cleanstart.")
+    repair_setup_py()

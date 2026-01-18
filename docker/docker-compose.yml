@@ -1,30 +1,46 @@
+version: '3.8'
+
 services:
   basekit:
-    container_name: open_agbot_basekit
-    image: agroecology/open_agbot:latest
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    privileged: true
+    image: openagbot-basekit:latest
+    container_name: basekit_dev
+    # Network mode host is required for ROS 2 DDS discovery between host/container
     network_mode: host
-    ipc: host
+    privileged: true
+    
+    # Dynamically maps to your host user to prevent Permission Denied errors
+    user: "${UID:-1000}:${GID:-1000}"
+    
     environment:
       - DISPLAY=${DISPLAY}
-      - PYTHONUNBUFFERED=1
+      - QT_X11_NO_MITSHM=1
+      # Using /tmp as a generic home ensures tools can always write config/logs
+      - HOME=/tmp
+      - ROS_HOME=/tmp/.ros
+      # Optional: Pass through specific ROS domain ID if used in the lab
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+
     volumes:
-      - ../:/workspace
-      - /dev:/dev
-    # We explicitly map the serial ports
-    devices:
-      - "/dev/ttyACM0:/dev/ttyACM0"
-      - "/dev/ttyACM1:/dev/ttyACM1"
-    command: >
-      /bin/bash -c "
-      source /opt/ros/humble/setup.bash &&
-      if [ ! -f '/workspace/install/setup.bash' ]; then
-        echo '🛑 Build not found. Waiting...';
-        sleep infinity;
-      else
-        source /workspace/install/setup.bash &&
-        ros2 launch basekit_launch basekit.launch.py
-      fi"
+      # GUI Support
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      
+      # Workspace Mounting (assumes compose file is in /docker/ folder)
+      - ../src:/workspace/src:rw
+      - ../install:/workspace/install:rw
+      - ../build:/workspace/build:rw
+      - ../log:/workspace/log:rw
+
+      # Persistent storage for ROS logs and tool configs
+      # Maps a hidden folder in your workspace to the container's scratch space
+      - ../.docker_home:/tmp:rw
+
+      # Device Access (LIDARs, Cameras, GPS)
+      - /dev:/dev:rw
+
+    working_dir: /workspace
+    
+    # Keeps the container alive for openagbot-dev.py to execute commands within
+    stdin_open: true
+    tty: true
+    
+    restart: unless-stopped
