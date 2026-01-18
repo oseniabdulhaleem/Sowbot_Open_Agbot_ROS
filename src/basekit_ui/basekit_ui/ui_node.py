@@ -1,8 +1,15 @@
+import sys
+import os
+
+# PATH INJECTION: Force Python to see ROS 2 Humble
+ros_path = '/opt/ros/humble/lib/python3.10/site-packages'
+if ros_path not in sys.path:
+    sys.path.append(ros_path)
+
 import rclpy
 from nicegui import ui
 import threading
 
-# We import Node inside the class or method to avoid top-level import issues
 class NiceGuiNode:
     def __init__(self):
         from rclcpp.node import Node
@@ -10,9 +17,8 @@ class NiceGuiNode:
         
         @ui.page('/')
         def main_page():
-            ui.label('AgBot Dashboard').classes('text-h4 q-pa-md')
-            with ui.row():
-                ui.button('STOP', color='red', on_click=lambda: self.node.get_logger().error('ESTOP'))
+            ui.label('AgBot Dashboard').classes('text-h4')
+            ui.button('TEST LOG', on_click=lambda: self.node.get_logger().info('UI Click!'))
 
     def ros_main(self):
         rclpy.spin(self.node)
@@ -20,8 +26,9 @@ class NiceGuiNode:
 def main(args=None):
     rclpy.init(args=args)
     gui_node = NiceGuiNode()
-    threading.Thread(target=gui_node.ros_main, daemon=True).start()
-    ui.run(port=8080, show=False)
+    t = threading.Thread(target=gui_node.ros_main, daemon=True)
+    t.start()
+    ui.run(port=8080, show=False, reload=False)
 
 if __name__ == '__main__':
     main()
