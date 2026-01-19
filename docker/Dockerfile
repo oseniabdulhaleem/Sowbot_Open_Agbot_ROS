@@ -15,7 +15,7 @@ SHELL ["/bin/bash", "-c"]
 # 2. Mirror & System Tooling (With Production/Dev Toggle)
 # HACK: Bypass signature checks for local network/time issues. COMMENT FOR PRODUCTION.
 ARG APT_OPTS="-o Acquire::AllowInsecureRepositories=true"
-ARG APT_AUTH="--allow-unauthenticated"
+#ARG APT_AUTH="--allow-unauthenticated"
 
 RUN for i in {1..5}; do \
     apt-get update -y ${APT_OPTS} && \
@@ -26,9 +26,43 @@ RUN for i in {1..5}; do \
     break || (echo "Retry $i/5..." && sleep 5); \
     done
 
-# 3. Add MongoDB Repository (Required for Topological Navigation)
-RUN curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-6.0.gpg && \
-    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/ubuntu jammy/mongodb-org/6.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+# Add MongoDB Repository and install dependencies for Topological Navigation
+RUN for i in {1..5}; do \
+    apt-get update ${APT_OPTS} && \
+    apt-get install -y ${APT_AUTH} --no-install-recommends gnupg curl && \
+    # 1. Official GPG Key
+    curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | \
+    gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server-6.0.gpg && \
+    # 2. Updated Repository String using the /apt/ path you found
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | \
+    tee /etc/apt/sources.list.d/mongodb-org-6.0.list && \
+    # 3. Update and Install
+    apt-get update ${APT_OPTS} && \
+    apt-get install -y ${APT_AUTH} --no-install-recommends \
+    mongodb-org-server \
+    mongodb-org-shell \
+    python3-pymongo \
+    ros-humble-interactive-markers \
+    ros-humble-navigation2 \
+    ros-humble-nav2-msgs && \
+    break || (echo "Retry $i/5 failing, waiting..." && sleep 10); \
+    done && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+
+
+
+#Get python3-pip:
+RUN for i in {1..5}; do \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    python3-pip \
+    python3-setuptools && \
+    break || sleep 2; \
+    done && rm -rf /var/lib/apt/lists/*
+
+# Pip commands using the full path to be safe
+RUN python3 -m pip install --no-cache-dir --upgrade pip --break-system-packages && \
+    python3 -m pip install --no-cache-dir nicegui lizard --break-system-packages
 
 # 4. Dependency Install (Consolidated for space efficiency)
 RUN for i in {1..5}; do \
@@ -79,7 +113,7 @@ COPY --from=builder /workspace/install /workspace/install
 COPY --from=builder /root/.lizard /opt/lizard
 
 # Environment & Entrypoint Configuration
-ENV PYTHONPATH="/workspace/install/basekit_ui/lib/python3.10/site-packages:/workspace/install/basekit_driver/lib/python3.10/site-packages:${PYTHONPATH}"
+ENV PYTHONPATH="${PYTHONPATH:-}:/workspace/install/your_package/lib/python3.10/site-packages"
 
 # Final Bash Setup
 RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
