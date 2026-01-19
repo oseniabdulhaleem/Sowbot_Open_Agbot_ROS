@@ -1,6 +1,6 @@
 # Open AgBot Devkit ROS
 
-This repository contains the ROS 2 workspace and Docker configuration for the Open AgBot development kit. This project is a fork of the original work by [Zauberzeug](https://github.com/zauberzeug) and has been optimized for agricultural robotics research using ROS 2 Humble.
+This repository contains the ROS 2 workspace and Docker configuration for the [Open AgBot by Agroecology Lab (WIP)](https://agroecologylab.org.uk/). This project is a fork of the original work by [Zauberzeug](https://github.com/zauberzeug) and has been optimized for agricultural robotics research using ROS 2 Humble.
 
 ## Project Structure
 
