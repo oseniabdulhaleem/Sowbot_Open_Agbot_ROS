@@ -57,7 +57,32 @@ Use these scripts to manage the hardware-to-software bridge on your host machine
 
 * **Function:** Mounts the local /src directory for live coding and forwards X11/GUI for tools like Rviz2 and Foxglove.
 * **Output:** Compiles the workspace and launches the full ROS 2 stack (GPS, Controller, and UI nodes).
-* **Usage:** `python3 openagbot-dev.py`
+* **Usage:**
+
+###  Core Commands
+| Command | Action | Primary Use Case |
+| :--- | :--- | :--- |
+| `python3 manage.py` | **Fast Launch** | **Default.** Runs existing build. Use for Python, UI, or Launch changes. |
+| `python3 manage.py rebuild` | **Full Compile** | **C++ changes**, new ROS messages, or fixed dependencies. |
+| `python3 manage.py build` | **Image Build** | Rebuilds the **Dockerfile**. Use after editing the Dockerfile layers. |
+| `python3 manage.py clean` | **Local Cleanup** | Deletes `build/`, `install/`, and `log/` folders from your ThinkPad. |
+
+###  Modifier Flags
+| Flag | Pair with... | Effect |
+| :--- | :--- | :--- |
+| `--nuclear` | `clean` | Wipes all Docker data + host build folders. **Fixes "No space left" errors.** |
+| `--no-cache` | `build` | Forces fresh downloads. **Fixes GPG/Signature/Clock errors.** |
+
+---
+
+###  Troubleshooting Reference
+
+| If you encounter... | Run this command |
+| :--- | :--- |
+| **Normal Python Dev** | `python3 manage.py` |
+| **C++ Header Errors** | `python3 manage.py rebuild` |
+| **Disk Space Full (Error 100)** | `python3 manage.py clean --nuclear` |
+| **GPG / Signature Errors** | `python3 manage.py build --no-cache` |
 
 ### 2. ./login.sh (access container in terminal)
 
