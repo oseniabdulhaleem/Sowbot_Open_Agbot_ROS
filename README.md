@@ -52,7 +52,7 @@ python3 manage.py
 Use these scripts to manage the hardware-to-software bridge on your host machine.
 
 
-### 1. openagbot-dev.py (Developer launch)
+### 1. manage.py (Developer launch)
 **Primary daily workflow.** This script bridges your local environment to the ROS 2 Humble container.
 
 * **Function:** Mounts the local /src directory for live coding and forwards X11/GUI for tools like Rviz2 and Foxglove.
@@ -62,9 +62,8 @@ Use these scripts to manage the hardware-to-software bridge on your host machine
 ### 2. ./login.sh (access container in terminal)
 
 * **Function:** Gets you into the container.
-* **Output:** A sourced bash shell in container.
+* **Output:** A sourced bash shell in your container.
 * **Usage:** `./login.sh`
-
 
 ### 2. cleanstart.sh (Deep Reset)
 **System Reset.** Use this if the environment becomes unstable or if build artifacts conflict after major code changes.
@@ -83,7 +82,6 @@ The `git.sh` script is a utility designed to standardize the workflow for the Op
 ```
 
 **Push to your dev branch:**
-
 ```
 ./git.sh -dev your commit message
 ```
