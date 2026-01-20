@@ -19,4 +19,4 @@ if(BUILD_TESTING)
 endif()
 
 ament_package() 
-install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY launch config config DESTINATION share/${PROJECT_NAME})

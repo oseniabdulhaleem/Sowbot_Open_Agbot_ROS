@@ -1,0 +1,9 @@
+/**:
+  ros__parameters:
+    serial_port: "/dev/ttyACM1"
+    baudrate: 115200
+    read_data:
+      list: ["v_batt"]
+      v_batt:
+        type: "float"
+        default: 0.0

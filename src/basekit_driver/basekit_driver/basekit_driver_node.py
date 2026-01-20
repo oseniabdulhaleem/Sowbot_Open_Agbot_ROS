@@ -26,6 +26,7 @@ class BasekitDriver(Node):
 
         # Declare parameters
         self.declare_parameter('startup_file', '')
+        self.declare_parameter('port', '/dev/ttyTHS0')
 
         self._serial_communication = SerialCommunication(self)
         self._odom_handler = OdomHandler(self, self._serial_communication)
