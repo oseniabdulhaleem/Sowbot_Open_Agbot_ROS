@@ -1,50 +1,45 @@
 #!/usr/bin/env python3
 import os
 import subprocess
-import time
+import re
 
 BLUE, GREEN, YELLOW, RED, BOLD, RESET = "\033[94m", "\033[92m", "\033[93m", "\033[91m", "\033[1m", "\033[0m"
+SUCCESS, FAIL, WARN = f"{GREEN}[✓]{RESET}", f"{RED}[✗]{RESET}", f"{YELLOW}[❗]{RESET}"
 
 def header(text):
     print(f"\n{BOLD}{BLUE}=== {text} ==={RESET}")
 
 def run_cmd(cmd):
     try:
-        full_cmd = f"source /opt/ros/humble/setup.bash && source /open_agbot_ws/install/setup.bash && {cmd}"
-        return subprocess.check_output(full_cmd, shell=True, executable="/bin/bash", stderr=subprocess.STDOUT).decode().strip()
+        full_cmd = f"source /opt/ros/humble/setup.bash && [ -f /open_agbot_ws/install/setup.bash ] && source /open_agbot_ws/install/setup.bash; {cmd}"
+        return subprocess.check_output(full_cmd, shell=True, executable="/bin/bash", stderr=subprocess.DEVNULL).decode().strip()
     except:
         return None
 
-header("SERIAL HARDWARE DEEP PROBE")
+header("SERIAL HARDWARE AVAILABILITY")
+for dev in ["/dev/ttyACM0", "/dev/ttyACM1"]:
+    if os.path.exists(dev):
+        # Check if another process is already using the port
+        lsof = subprocess.getoutput(f"lsof {dev}")
+        status = SUCCESS if not lsof else WARN
+        print(f"{status} {dev}: Available")
+        if lsof:
+            print(f"    {RED}↳ PORT BUSY:{RESET} Used by PID {lsof.splitlines()[-1].split()[1]}")
+    else:
+        print(f"{FAIL} {dev}: NOT FOUND")
 
-# Check if we can actually read strings from the Controller
-print(f"{YELLOW}[?] Sniffing ACM1 (Controller) for text...{RESET}")
-sniff_acm1 = subprocess.run("timeout 2 strings /dev/ttyACM1 | head -n 5", shell=True, capture_output=True).stdout.decode()
-if sniff_acm1:
-    print(f"    {GREEN}[✓] Raw Data Found: {sniff_acm1.splitlines()[0]}{RESET}")
-else:
-    print(f"    {RED}[✗] No readable text on ACM1. Hardware may be silent or wrong baud.{RESET}")
+header("ROS 2 GRAPH: TOPIC & NODE HEALTH")
+nodes = run_cmd("ros2 node list") or ""
+print(f"{BOLD}Active Nodes:{RESET}\n{nodes if nodes else 'None'}")
 
-header("ROS TOPIC DEFINITIONS")
-# Check if the message types are even known to the system
-msg_check = run_cmd("ros2 interface show sensor_msgs/msg/NavSatFix")
-if msg_check:
-    print(f"{GREEN}[✓] ROS 2 Message definitions loaded.{RESET}")
-else:
-    print(f"{RED}[✗] ROS 2 Message definitions MISSING. Sourcing issue.{RESET}")
-
-header("TOPIC PUBLISHER STATUS")
-# Find out who is supposed to be talking
-topics = ["/ublox_gps_node/fix", "/v_batt", "/motor_status"]
+topics = ["/fix", "/v_batt", "/motor_status"]
 for t in topics:
     info = run_cmd(f"ros2 topic info {t}")
-    if info:
-        pubs = [line for line in info.split('\n') if "Publisher count" in line]
-        print(f"{BOLD}{t}{RESET}: {pubs[0] if pubs else 'No Info'}")
-
-header("LOG ERROR SCAN")
-# Check the last 10 lines of ROS logs for 'Error' or 'Fail'
-logs = run_cmd("ros2 doctor --report | grep 'log file:'")
-print(f"{YELLOW}Check logs for hardware timeouts if publishers are 0.{RESET}")
+    if info and "Publisher count: 0" not in info:
+        hz = run_cmd(f"timeout 1s ros2 topic hz {t}")
+        rate = re.findall(r"average rate: ([\d.]+)", hz) if hz else None
+        print(f"{SUCCESS} {t}: {GREEN}{rate[0] + ' Hz' if rate else 'Streaming'}{RESET}")
+    else:
+        print(f"{FAIL} {t}: No Publisher found.")
 
 header("DIAGNOSTIC COMPLETE")

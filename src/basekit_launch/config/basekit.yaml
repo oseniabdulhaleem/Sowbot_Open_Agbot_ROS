@@ -19,7 +19,7 @@ controller:
         default: 0.0
         type: double
     robot_type: lizard
-    serial_port: /dev/ttyACM1
+     # serial_port: /dev/ttyACM1
     use_lizard: true
 tf_base_link_imu:
   ros__parameters:
@@ -57,7 +57,7 @@ tf_imu_vsm:
 ublox_gps_node:
   ros__parameters:
     baudrate: 115200
-    device: /dev/ttyACM0
+     # device: /dev/ttyACM0
     frame_id: gps
     gnss:
       beidou: true

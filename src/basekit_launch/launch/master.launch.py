@@ -2,49 +2,37 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.actions import LogInfo
 
 def generate_launch_description():
-    # Load configuration file for the driver
-    config = os.path.join(
-        get_package_share_directory('basekit_launch'),
-        'config',
-        'thinkpad_override.yaml'
-    )
-
-    # 1. Grab hardware ports from the environment (with safety defaults)
-    # This is where the magic happens: it reads the -e flags from Docker!
-    gps_port = os.environ.get('GPS_PORT', '/dev/ttyACM1')
+    # 1. Pull from Environment (Host -> manage.py -> Docker Env)
+    # This is our Single Source of Truth
     mcu_port = os.environ.get('MCU_PORT', '/dev/ttyACM0')
+    gps_port = os.environ.get('GPS_PORT', '/dev/ttyACM2')
 
-    print(f"🚀 [LAUNCH] Starting with GPS: {gps_port} and MCU: {mcu_port}")
+    # 2. Paths to YAML configs
+    driver_config = os.path.join(get_package_share_directory('basekit_driver'), 'config', 'basekit_driver.yaml')
+    ublox_config = os.path.join(get_package_share_directory('basekit_launch'), 'config', 'ublox.yaml')
 
     return LaunchDescription([
-        # U-Blox GPS Node
-        Node(
-            package='ublox_gps',
-            executable='ublox_gps_node',
-            name='ublox_gps_node',
-            # We now use the variable instead of a hardcoded string
-            parameters=[{
-                'device': gps_port, 
-                'uart1.baudRate': 115200,
-                'tmode3': 0
-            }]
-        ),
+        LogInfo(msg=f'--- Launching AgBot with MCU:{mcu_port} GPS:{gps_port} ---'),
 
-        # Basekit Driver (The ESP32/MCU)
+        # MCU Driver Node
         Node(
             package='basekit_driver',
             executable='basekit_driver_node',
             name='basekit_driver_node',
-            # We pass the port via parameter here too if the driver supports it
-            parameters=[config, {'port': mcu_port}]
+            output='screen',
+            parameters=[driver_config, {'port': mcu_port}] # Force the port override
         ),
 
-        # UI Node
+        # GPS Node
         Node(
-            package='basekit_ui', 
-            executable='basekit_ui_node', 
-            name='basekit_ui_node'
+            package='ublox_gps',
+            executable='ublox_gps_node',
+            name='ublox_gps_node',
+            output='screen',
+            # Force the device override
+            parameters=[ublox_config, {'device': gps_port}] 
         )
     ])

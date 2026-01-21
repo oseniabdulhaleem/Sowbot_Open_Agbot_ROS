@@ -1,3 +1,4 @@
+from rclpy.parameter import Parameter
 import os
 #!/usr/bin/env python3
 """ Copyright (c) 2024 Leibniz-Institut für Agrartechnik und Bioökonomie e.V. (ATB)
@@ -50,17 +51,20 @@ class SerialCommunication(Communication):
         self._logger = node.get_logger()
         self._logger.info('Init serial communication')
 
-        # Get serial port from parameter
-        node.declare_parameter('serial_port', os.environ.get('MCU_PORT', '/dev/ttyACM0'))
+        # Get serial port from parameter (SSOT Logic)
+        if not node.has_parameter('serial_port'):
+            node.declare_parameter('serial_port', os.environ.get('MCU_PORT', '/dev/ttyACM0'))
+        
         self._serial_port = node.get_parameter('serial_port').value
-        self._logger.info('Using serial port: ' + self._serial_port)
+        self._logger.info('Using serial port: ' + str(self._serial_port))
 
-        self.serial: serial.Serial | None = self.open_serial_port()
+        self.serial = self.open_serial_port()
         self.mutex = Lock()
 
         # Get expander name from parameter
-        node.declare_parameter('expander_name', 'expander')
-        self._expander_name = node.get_parameter('expander_name').value
+        if not node.has_parameter('expander_name'):
+            node.declare_parameter('expander_name', 'expander')
+            self._expander_name = node.get_parameter('expander_name').value
 
         self.init_core_data(node)
 
@@ -69,24 +73,28 @@ class SerialCommunication(Communication):
 
         self._core_data_list = []
 
-        node.declare_parameter('read_data.list', rclpy.Parameter.Type.STRING_ARRAY)
-        # Get the parameter
+        if not node.has_parameter('read_data.list'):
+            node.declare_parameter('read_data.list', rclpy.Parameter.Type.STRING_ARRAY)
+            # Get the parameter
+        # Safe declaration of read_data.list
+        if not node.has_parameter('read_data.list'):
+            node.declare_parameter('read_data.list', rclpy.Parameter.Type.STRING_ARRAY)
         data_list = node.get_parameter('read_data.list').value
         self._logger.info('Received list of strings: ' + str(data_list))
 
         pos = 0
         for data in data_list:
-            node.declare_parameter('read_data.' + data + '.type', rclpy.Parameter.Type.STRING)
+            if not node.has_parameter('read_data.' + data + '.type'):
+                node.declare_parameter('read_data.' + data + '.type', 'String')
+            if not node.has_parameter('read_data.' + data + '.default'):
+                node.declare_parameter('read_data.' + data + '.default')
+            else:
+                # If already declared (e.g. by YAML as a string), just use it
+                pass
+            
             type_str = node.get_parameter('read_data.' + data + '.type').value
-            if type_str == 'bool':
-                node.declare_parameter('read_data.' + data + '.default', rclpy.Parameter.Type.BOOL)
-            elif type_str == 'int':
-                node.declare_parameter(
-                    'read_data.' + data + '.default',
-                    rclpy.Parameter.Type.INTEGER)
-            elif type_str == 'double' or type_str == 'float':
-                node.declare_parameter('read_data.' + data + '.default', rclpy.Parameter.Type.DOUBLE)
             default = node.get_parameter('read_data.' + data + '.default').value
+            
             self._core_data_list.append(CoreData(data, pos, type_str, default))
             pos = pos + 1
 
