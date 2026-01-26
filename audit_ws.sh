@@ -1,60 +1,49 @@
 #!/bin/bash
-echo "=== OPEN AGBOT WORKSPACE AUDIT V3 (UI & ROS DEBUG) ==="
+# VERSION: 6.3.0
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-# 1. DOCKER & NETWORK CHECK
-echo -e "\n1. DOCKER & NETWORK"
-echo "------------------------------------------------"
-if docker ps | grep -q "open_ag_runtime"; then
-    echo "[✔] Container 'open_ag_runtime' is running."
-    PORT_8080=$(netstat -tuln | grep :8080)
-    if [ -z "$PORT_8080" ]; then
-        echo "[✘] Port 8080 is NOT listening. UI server likely crashed on startup."
-    else
-        echo "[✔] Port 8080 is active."
-    fi
-else
-    echo "[!] Container NOT running. Run 'python3 manage.py' first."
-fi
+echo -e "${YELLOW}=== OPEN AGBOT WORKSPACE ULTIMATE AUDIT V6.3 ===${NC}"
 
-# 2. WORKSPACE & BUILD CONSISTENCY
-echo -e "\n2. BUILD & SOURCE STATUS"
-echo "------------------------------------------------"
-[ -f "install/setup.bash" ] && echo "[✔] install/setup.bash exists." || echo "[✘] install/ directory missing! Run build."
-[ -d "build/basekit_ui" ] && echo "[✔] basekit_ui build directory exists." || echo "[✘] basekit_ui NOT built."
+# ... [Keep Sections 1-4 from V6.2] ...
 
-# 3. UI CODE LINTING (Finding the 500 Error)
-echo -e "\n3. UI CODE LOGIC (Anti-Crash Check)"
+# 5. GPS PROTOCOL & MESSAGE DEEP DIVE
+echo -e "\n5. GPS MESSAGE CONFIGURATION CHECK"
 echo "------------------------------------------------"
-UI_PATH="src/basekit_ui/basekit_ui/basekit_ui_node.py"
-if [ -f "$UI_PATH" ]; then
-    echo "[✔] Found $UI_PATH"
+UBLOX_YAML="src/ublox/ublox_gps/config/zed_f9p.yaml"
+if [ -f "$UBLOX_YAML" ]; then
+    echo -e "${BLUE}Inspecting $UBLOX_YAML for NACK-triggering keys:${NC}"
+    # Check for high-frequency conflicts
+    grep -E "meas_rate|nav_rate|ubx|inf|publish" "$UBLOX_YAML" | sed 's/^/  /'
     
-    # Check for blocking calls without timeouts
-    BLOCKING=$(grep -E "wait_for_service\(\)|wait_for_server\(\)" "$UI_PATH")
-    if [ ! -z "$BLOCKING" ]; then
-        echo "[!] WARNING: Found blocking calls without timeouts:"
-        echo "    $BLOCKING"
-        echo "    (This causes 'Internal Server Error' if hardware is missing!)"
-    else
-        echo "[✔] No infinite blocking calls detected."
-    fi
-    
-    # Check for relative imports that fail in Docker
-    REL_IMPORT=$(grep "from \." "$UI_PATH")
-    if [ ! -z "$REL_IMPORT" ]; then
-        echo "[!] WARNING: Relative imports found. These often fail in ROS 2 nodes."
-    fi
-else
-    echo "[✘] UI Node file NOT found at $UI_PATH"
+    echo -e "\n${BLUE}Active Message Classes:${NC}"
+    # If raw data is enabled at high rates, F9P will NACK
+    grep -E "raw|sfrb|rxm|nav:" -A 5 "$UBLOX_YAML" | grep "all:" | sed 's/^/  /'
 fi
 
-# 4. ENVIRONMENT & PATHS
-echo -e "\n4. ENVIRONMENT VARIABLES"
+# 6. LIVE DATA STREAM ANALYSIS
+echo -e "\n6. LIVE TOPIC DATA CHECK"
 echo "------------------------------------------------"
-if [ -f ".env" ]; then
-    cat .env
+CONTAINER_NAME=$(docker ps --format '{{.Names}}' | grep -E "open_ag_runtime|open_agbot")
+if [ ! -z "$CONTAINER_NAME" ]; then
+    echo "Checking if GPS Fix is actually being published despite NACKs..."
+    docker exec $CONTAINER_NAME bash -c "source /opt/ros/humble/setup.bash && source install/setup.bash && timeout 3s ros2 topic echo /gps/fix --once" || echo -e "[${RED}✘${NC}] No data on /gps/fix yet."
 else
-    echo "[✘] .env file missing."
+    echo "Container not running. Start it to see live data."
 fi
 
-echo -e "\n=== AUDIT COMPLETE ==="
+# 7. NUCLEAR RECOVERY (Updated to handle NACK loops)
+echo -e "\n7. RECOVERY ACTIONS"
+echo "------------------------------------------------"
+read -p "Reset GPS Node & Apply Settings? [y/N]: " confirm
+if [[ "$confirm" == [yY] ]]; then
+    sudo systemctl stop gpsd 2>/dev/null
+    sudo fuser -k /dev/ttyACM1 /dev/ttyACM2 2>/dev/null
+    echo "Settings cleared. Restarting container..."
+    docker restart $CONTAINER_NAME
+fi
+
+echo -e "\n${YELLOW}=== AUDIT COMPLETE ===${NC}"

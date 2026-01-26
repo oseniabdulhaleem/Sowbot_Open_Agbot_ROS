@@ -1,81 +1,29 @@
-# ==========================================
-# STAGE 1: The Builder
-# ==========================================
-FROM ros:humble-ros-base AS builder
-
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
-ENV WORKSPACE=/workspace
-WORKDIR $WORKSPACE
-
-SHELL ["/bin/bash", "-c"]
-
-RUN for i in {1..5}; do \
-    apt-get update -y && \
-    apt-get install -y --no-install-recommends \
-    ca-certificates curl wget gnupg2 unzip git python3-pip python3-setuptools && \
-    curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
-    break || (echo "Retry $i/5..." && sleep 5); \
-    done
-
-RUN for i in {1..5}; do \
-    curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | \
-    gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server-6.0.gpg && \
-    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | \
-    tee /etc/apt/sources.list.d/mongodb-org-6.0.list && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends --fix-missing \
-    mongodb-org-server mongodb-org-shell python3-pymongo \
-    python3-serial udev libasio-dev python3-colcon-common-extensions \
-    ros-humble-rmw-cyclonedds-cpp libgeographic-dev python3-transforms3d && \
-    break || (echo "Retry $i/5 failing..." && sleep 10); \
-    done
-
-RUN python3 -m pip install --no-cache-dir --upgrade pip && \
-    python3 -m pip install --no-cache-dir nicegui lizard && \
-    mkdir -p /root/.lizard && cd /root && \
-    LATEST_TAG=$(curl -s https://api.github.com/repos/zauberzeug/lizard/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")') && \
-    wget -q -O lizard.zip "https://github.com/zauberzeug/lizard/releases/download/${LATEST_TAG}/lizard_firmware_and_devtools_${LATEST_TAG}_esp32.zip" && \
-    unzip -qo lizard.zip -d /root/.lizard && rm lizard.zip
-
-COPY ./src ./src
-RUN apt-get update && \
-    if [ ! -d /etc/ros/rosdep/sources.list.d/ ]; then rosdep init; fi && \
-    rosdep update && \
-    rosdep install --from-paths src --ignore-src -r -y \
-    --skip-keys "pyserial nicegui lizard transforms3d" && \
-    . /opt/ros/humble/setup.sh && \
-    colcon build --symlink-install --executor sequential --parallel-workers 1
-
-# ==========================================
-# STAGE 2: The Runtime
-# ==========================================
 FROM ros:humble-ros-base
+ENV DEBIAN_FRONTEND=noninteractive
 ENV WORKSPACE=/workspace
 WORKDIR $WORKSPACE
 
-COPY --from=builder $WORKSPACE/install ./install
-COPY --from=builder /root/.lizard /root/.lizard
+# Install everything via APT that we can
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl gnupg2 build-essential cmake python3-pip \
+    libasio-dev libgeographic-dev python3-colcon-common-extensions \
+    ros-humble-rmw-cyclonedds-cpp python3-serial udev \
+    ros-humble-diagnostic-updater \
+    ros-humble-ublox-msgs \
+    ros-humble-xacro \
+    ros-humble-tf-transformations \
+    python3-transforms3d
 
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
-ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-# Fixed PYTHONPATH warning by avoiding self-reference if undefined
-ENV PYTHONPATH="/opt/ros/humble/lib/python3.10/site-packages:$WORKSPACE/install/basekit_ui/lib/python3.10/site-packages:$WORKSPACE/install/basekit_driver/lib/python3.10/site-packages"
-
-# RE-ADD MongoDB Repo for Stage 2
-RUN apt-get update && apt-get install -y curl gnupg2 && \
-    curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | \
+RUN curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | \
     gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server-6.0.gpg && \
     echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | \
-    tee /etc/apt/sources.list.d/mongodb-org-6.0.list && \
-    apt-get update && apt-get install -y --no-install-recommends \
-    python3-pip python3-serial udev mongodb-org-shell \
-    ros-humble-rmw-cyclonedds-cpp && \
-    python3 -m pip install --no-cache-dir nicegui lizard transforms3d && \
-    rm -rf /var/lib/apt/lists/*
+    tee /etc/apt/sources.list.d/mongodb-org-6.0.list
 
-RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
-    echo "source $WORKSPACE/install/setup.bash" >> /root/.bashrc
+RUN apt-get update && apt-get install -y mongodb-org-shell python3-pymongo
 
-RUN usermod -a -G dialout root
-CMD ["/bin/bash"]
+# Only install UI/Logic libs via PIP
+RUN python3 -m pip install --no-cache-dir nicegui lizard
+
+# This ensures Python can find the ROS-installed transformations package
+ENV PYTHONPATH="${PYTHONPATH}:/opt/ros/humble/lib/python3.10/site-packages"
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
