@@ -1,0 +1,12 @@
+nodes:
+  - node:
+      name: "start_point"
+      pose: {position: {x: 0.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}
+  - node:
+      name: "end_point"
+      pose: {position: {x: 5.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}
+edges:
+  - edge:
+      node_id: "start_point"
+      dest_node: "end_point"
+      action: "move_base"

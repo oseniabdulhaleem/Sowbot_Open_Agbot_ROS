@@ -1,50 +1,52 @@
-import os
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node, SetRemap
-from launch.conditions import IfCondition # <--- Added this
 
 def generate_launch_description():
-    remap_gps = SetRemap(src="/ublox_gps_node/fix", dst="/gps/fix")
-    remap_vel = SetRemap(src="/ublox_gps_node/fix_velocity", dst="/gps/fix_velocity")
-    # Declare Arguments
-    declare_gps_port = DeclareLaunchArgument('gps_port', default_value='/dev/ttyACM1')
-    declare_mcu_port = DeclareLaunchArgument('mcu_port', default_value='/dev/ttyACM0')
-    # New argument to toggle GPS
-    declare_use_gps = DeclareLaunchArgument('use_gps', default_value='true')
+    map_manager = Node(package="topological_navigation", executable="map_manager2.py", name="map_manager", parameters=[{"tmap_file": "/workspace/maps/test_map.yaml"}], arguments=['/workspace/maps/test_map.yaml'])
+    map_manager = Node(package="topological_navigation", executable="map_manager2.py", name="map_manager", parameters=[{"tmap_file": "/workspace/maps/test_map.yaml"}], arguments=['/workspace/maps/test_map.yaml'])
+    sim = LaunchConfiguration('sim')
+    gps_port = LaunchConfiguration('gps_port')
+    mcu_port = LaunchConfiguration('mcu_port')
+    map_name = LaunchConfiguration('map_name', default='agbot_field')
 
-    basekit_launch_dir = get_package_share_directory('basekit_launch')
-    config_file = os.path.join(basekit_launch_dir, 'config', 'basekit.yaml')
-    ublox_config = os.path.join(get_package_share_directory('ublox_gps'), 'config', 'zed_f9p.yaml')
+    return LaunchDescription([nav2_controller, map_manager, 
+        DeclareLaunchArgument('sim', default_value='false'),
+        DeclareLaunchArgument('gps_port', default_value='virtual'),
+        DeclareLaunchArgument('mcu_port', default_value='virtual'),
+        DeclareLaunchArgument('map_name', default_value='agbot_field'),
 
-    basekit_driver_node = Node(
-        package='basekit_driver',
-        executable='basekit_driver_node',
-        name='basekit_driver_node',
-        parameters=[config_file, {'port': os.environ.get('MCU_PORT', '/dev/ttyACM0')}],
-        remappings=[('/cmd_vel', '/cmd_vel')]
-    )
-
-    # GPS Node now has a condition!
-    ublox_gps_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('ublox_gps'), 'launch', 'ublox_gps_node-launch.py')
+        # Driver Node
+        Node(
+            package='basekit_driver',
+            executable='basekit_driver_node',
+            parameters=[{'use_sim_time': sim, 'gps_port': gps_port, 'mcu_port': mcu_port}]
         ),
-        launch_arguments={'params_file': ublox_config, 'device': LaunchConfiguration('gps_port')}.items(),
-        condition=IfCondition(LaunchConfiguration('use_gps')) # <--- Logic added here
-    )
 
-    ui_node = Node(package='basekit_ui', executable='basekit_ui_node', name='web_ui')
+        # Web UI
+        Node(
+            package='basekit_ui',
+            executable='basekit_ui_node',
+            parameters=[{'use_sim_time': sim}]
+        ),
 
-    return LaunchDescription([
-        remap_gps, remap_vel,
-        declare_gps_port,
-        declare_mcu_port,
-        declare_use_gps,
-        basekit_driver_node,
-        ublox_gps_launch,
-        ui_node
+        # Topological Navigation (AOC Branch)
+        Node(
+            package='topological_navigation',
+            executable='navigation2.py',
+            name='topological_navigation',
+            parameters=[{'map_name': map_name, 'use_sim_time': sim}],
+            output='screen'
+        )
     ])
+
+# Minimal Nav2 Controller addition
+from launch_ros.actions import Node
+nav2_controller = Node(
+    package='nav2_controller',
+    executable='controller_server',
+    name='controller_server',
+    output='screen',
+    parameters=[{'use_sim_time': True}]
+)

@@ -6,34 +6,45 @@ services:
     container_name: openagbot_app
     network_mode: host
     privileged: true
-    # Resource limits to prevent the "GPS Unplugged" infinite loop from freezing the Host
+    # Resource limits to prevent "GPS Unplugged" loops from freezing the ThinkPad
     deploy:
       resources:
         limits:
-          cpus: '1.5'  # Caps total container usage to 150% (75% of 2 cores)
-    # Loads the GPS_PORT and MCU_PORT from your .env file
+          cpus: '1.5'  # 150% of a single core (75% of total dual-core capacity)
+    
+    # Loads hardware assignments from .env
     env_file:
       - .env
+    
     volumes:
       - /dev:/dev
-      - .:/workspace  # Bind mount for dev-mode
+      - ..:/workspace  # Maps the main open_agbot_ws directory into the container
+    
     environment:
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - MONGO_HOST=localhost
       - GPS_PORT=${GPS_PORT}
       - MCU_PORT=${MCU_PORT}
-    # Passing variables directly to the ROS2 launch system
+    
+    # Logic: Start DB Store -> Wait for connection -> Launch Hardware or Virtual Driver
     command: >
       bash -c "source /workspace/install/setup.bash && 
-      if [ "$GPS_PORT" != "virtual" ]; then 
-        ros2 launch basekit_launch basekit_launch.py gps_port:=$GPS_PORT mcu_port:=$MCU_PORT; 
+      echo '🚀 Starting MongoDB Store...' &&
+      ros2 launch mongodb_store mongodb_store.launch.py & 
+      sleep 7;
+      if [ \"$$GPS_PORT\" != \"virtual\" ]; then 
+        echo '🛰️ Hardware Mode: GPS=$$GPS_PORT, MCU=$$MCU_PORT' &&
+        ros2 launch basekit_launch basekit_launch.py gps_port:=$$GPS_PORT mcu_port:=$$MCU_PORT; 
       else 
-        ros2 run basekit_driver basekit_driver_node --ros-args -r __node:=controller -p use_sim_time:=true & ros2 run basekit_ui basekit_ui_node; 
+        echo '💻 Virtual Mode: Launching UI and Driver Node' &&
+        ros2 run basekit_driver basekit_driver_node --ros-args -r __node:=controller -p use_sim_time:=true & 
+        ros2 run basekit_ui basekit_ui_node; 
       fi"
+    
     depends_on:
       - mongodb
 
-  # Database for Topological Navigation
+  # Database for Topological Navigation (aoc branch)
   mongodb:
     image: mongo:6.0
     container_name: agbot_db
