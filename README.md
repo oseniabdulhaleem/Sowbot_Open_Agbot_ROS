@@ -4,7 +4,7 @@ An open-source, containerised ROS 2 stack for autonomous agricultural robotics. 
 
 Development is led by the <a href="https://agroecologylab.org.uk" target="_blank">Agroecology Lab </a> building on the core developed by <a href="https://github.com/zauberzeug/" target="_blank">Zauberzeug</a> 
 
-Latest work is in the /dev branch. 
+(Latest work with Topological Nav is in the /dev branch, but under heavy development)
 ---
 
 ## Quick Start
@@ -89,7 +89,6 @@ Ratings scale from 0.1 (Conceptual) to 1.0 (Production-Ready), with 0.0 indicati
 | **0.3** | **<a href="https://github.com/LCAS/sentor" target="_blank">Sentor Safety & Health Monitoring</a>** | Integrated hardware-software heartbeat and topic-based diagnostics to trigger automated recovery or emergency motor cut-off. |
 | **0.3** | **<a href="https://github.com/Agroecology-Lab/Open_agbot_devkit_ros" target="_blank">Dynamic Hardware Abstraction</a>** | Lizard firmware engine integration for real-time ESP32 configuration via the basekit driver. |
 | **0.4** | **<a href="https://github.com/Agroecology-Lab/Open_agbot_devkit_ros" target="_blank">Real-time Telemetry Dashboard</a>** | Web-based cockpit for monitoring battery and GPS health via the `basekit_ui` package. |
-=======
 | **0.5** | **<a href="https://github.com/Agroecology-Lab/Open_agbot_devkit_ros" target="_blank">Stable Device Addressing</a>** | Persistent symlinking via the `fixusb.py` utility to map hardware to `/dev/esp` and `/dev/gps`. |
 | **0.4** | **<a href="https://github.com/Agroecology-Lab/Open_agbot_devkit_ros" target="_blank">Environment-Driven Configuration</a>** | Host-agnostic architecture using dynamic environment variables within the launch system. |
 | **0.6** | **<a href="https://github.com/LCAS/sentor" target="_blank">Sentor Safety & Health Monitoring</a>** | Integrated hardware-software heartbeat and topic-based diagnostics to trigger automated recovery or emergency motor cut-off. |
@@ -121,7 +120,7 @@ You may also have success with alternate platforms such as
 - Compute: Linux-based host (Avaota A1, Raspberry Pi, Jetson) running Docker.
 - MCU: ESP32 Control Board 
 - GPS: u-blox ZED-F9P 
-- Communication: USB Serial (CDC).
+- Communication: UART.
 - <a href="https://lizard.dev/module_reference/" target="_blank">Hardware & Motor drivers supported by Lizard </a>M
 
 ---
