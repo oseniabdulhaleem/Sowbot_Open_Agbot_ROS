@@ -7,7 +7,7 @@ ublox_gps_node:
     frame_id: gnss
 
     uart1:
-      baudrate: 921600
+      baudrate: 115200
 
     config_on_startup: false    # If false, the node will not override configurations of the device on startup
                                 # Device should be configured with u-center and configurations should be saved in flash

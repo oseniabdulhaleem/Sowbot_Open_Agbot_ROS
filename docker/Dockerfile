@@ -1,43 +1,32 @@
 # ==========================================
-# STAGE 1: The Builder
+# STAGE 1: The Builder (Compilation Environment)
 # ==========================================
 FROM ros:humble-ros-base AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
 ENV WORKSPACE=/workspace
 WORKDIR $WORKSPACE
 
 SHELL ["/bin/bash", "-c"]
 
-# 1. Infrastructure & MongoDB Repositories
+# 1. Build-time Headers + Core Build Tools (Synced from working version)
 RUN for i in {1..5}; do \
     apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl wget gnupg2 unzip git lsb-release && \
-    curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server-6.0.gpg && \
-    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list && \
-    apt-get update && break || sleep 10; \
+    apt-get install -y --no-install-recommends \
+    ca-certificates curl wget gnupg2 unzip git python3-pip python3-setuptools \
+    build-essential cmake python3-colcon-common-extensions \
+    libasio-dev libgeographic-dev \
+    ros-humble-rmw-cyclonedds-cpp \
+    ros-humble-nmea-msgs ros-humble-diagnostic-msgs ros-humble-diagnostic-updater \
+    ros-humble-tf2-geometry-msgs ros-humble-ublox-serialization ros-humble-ublox-msgs && \
+    break || (echo "Retry $i/5 failed, sleeping..." && sleep 10); \
     done
 
-# 2. Comprehensive Dependency Install
-RUN for i in {1..5}; do \
-    apt-get update && \
-    apt-get install -y --no-install-recommends --fix-missing \
-    python3-pip python3-setuptools python3-yaml python3-numpy python3-serial python3-colcon-common-extensions \
-    libasio-dev udev qtbase5-dev mongodb-org-server mongodb-org-shell python3-pymongo \
-    ros-humble-navigation2 ros-humble-nav2-msgs ros-humble-nav2-controller ros-humble-nav2-bt-navigator \
-    ros-humble-ublox-gps ros-humble-nmea-msgs ros-humble-rtcm-msgs ros-humble-gps-msgs \
-    ros-humble-tf2-ros ros-humble-tf-transformations ros-humble-visualization-msgs \
-    ros-humble-rmw-cyclonedds-cpp ros-humble-iceoryx-binding-c \
-    ros-humble-robot-state-publisher ros-humble-joint-state-publisher \
-    ros-humble-twist-mux ros-humble-xacro ros-humble-usb-cam && \
-    break || (echo "Retry $i/5 failing..." && sleep 10); \
-    done && apt-get clean && rm -rf /var/lib/apt/lists/*
+# 2. Python Build Deps
+RUN pip3 install --no-cache-dir --default-timeout=100 --retries 5 \
+    nicegui lizard transforms3d
 
-# 3. Python Ecosystem & Lizard Firmware
-RUN python3 -m pip install --no-cache-dir --upgrade pip && \
-    pip3 install --no-cache-dir nicegui lizard transforms3d
-
+# 3. Legacy Lizard Firmware Extraction
 RUN mkdir -p /root/.lizard && cd /root && \
     LATEST_TAG=$(curl -s https://api.github.com/repos/zauberzeug/lizard/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")') && \
     wget -q -O lizard.zip "https://github.com/zauberzeug/lizard/releases/download/${LATEST_TAG}/lizard_firmware_and_devtools_${LATEST_TAG}_esp32.zip" && \
@@ -47,52 +36,60 @@ RUN mkdir -p /root/.lizard && cd /root && \
 # 4. Two-Phase Workspace Build
 COPY ./src ./src
 RUN . /opt/ros/humble/setup.sh && \
+    export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp && \
     colcon build --symlink-install --packages-select ublox_serialization ublox_msgs --executor sequential && \
     . install/setup.sh && \
     colcon build --symlink-install --executor sequential --parallel-workers 1
 
 # ==========================================
-# STAGE 2: The Runtime
+# STAGE 2: The Runtime (The Final Lean Image)
 # ==========================================
 FROM ros:humble-ros-base
 WORKDIR /workspace
 
-# Copy build artifacts and firmware
+ENV DEBIAN_FRONTEND=noninteractive
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+# Combined PYTHONPATH from your working version and our workspace
+ENV PYTHONPATH="/workspace/install/lib/python3.10/site-packages:/opt/ros/humble/lib/python3.10/site-packages"
+ENV LD_LIBRARY_PATH="/workspace/install/lib:/opt/ros/humble/lib:/usr/local/lib"
+
+# 1. Runtime Deps + MongoDB 6.0 (Preserving your specific setup)
+RUN for i in {1..5}; do \
+    apt-get update && apt-get install -y curl gnupg && \
+    curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server-6.0.gpg && \
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    htop nano git bash-completion net-tools iputils-ping \
+    python3-pip python3-serial udev libasio-dev libgeographic-dev \
+    ros-humble-navigation2 ros-humble-ublox-gps ros-humble-nmea-msgs \
+    ros-humble-rtcm-msgs ros-humble-gps-msgs ros-humble-tf-transformations \
+    ros-humble-rmw-cyclonedds-cpp ros-humble-twist-mux ros-humble-xacro \
+    ros-humble-teleop-twist-keyboard ros-humble-ros2cli \
+    mongodb-org-server mongodb-org-shell && \
+    pip3 install --no-cache-dir --default-timeout=100 --retries 5 \
+    nicegui lizard transforms3d pymongo && \
+    # VERIFICATION: This forces the build to fail if CycloneDDS didn't actually land
+    ls /opt/ros/humble/lib/librmw_cyclonedds_cpp.so && \
+    break || (echo "Apt/Pip failure, retrying..." && sleep 10); \
+    done
+
+# 2. Transfer Build Artifacts
 COPY --from=builder /workspace/install /workspace/install
 COPY --from=builder /root/.lizard /opt/lizard
-COPY --from=builder /usr/share/keyrings/mongodb-server-6.0.gpg /usr/share/keyrings/mongodb-server-6.0.gpg
-COPY --from=builder /etc/apt/sources.list.d/mongodb-org-6.0.list /etc/apt/sources.list.d/mongodb-org-6.0.list
 
-# --- SYSTEM LINKER FIX ---
-# This registers custom message libraries globally so C++ nodes (Nav2) can find them
-RUN echo "/workspace/install/map_msgs/lib" > /etc/ld.so.conf.d/agbot_messages.conf && \
-    echo "/workspace/install/topological_navigation_msgs/lib" >> /etc/ld.so.conf.d/agbot_messages.conf && \
+# 3. System Linker Update
+RUN echo "/workspace/install/lib" > /etc/ld.so.conf.d/agbot_final.conf && \
+    echo "/opt/ros/humble/lib" >> /etc/ld.so.conf.d/agbot_final.conf && \
     ldconfig
 
-# Update Library and Python Paths
-
-ENV LD_LIBRARY_PATH="/workspace/install/map_msgs/lib:/workspace/install/topological_navigation_msgs/lib:/opt/ros/humble/lib"
-ENV PYTHONPATH="/workspace/install/topological_navigation/lib/python3.10/site-packages:/workspace/install/basekit_driver/lib/python3.10/site-packages"
-
-
-# Make sure the scripts are executable
+# 4. Final Permission Cleanup
 RUN chmod +x /workspace/install/topological_navigation/lib/topological_navigation/*.py || true
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
-ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+# 5. Quality of Life (Your custom prompt and sourcing)
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
+    echo "source /workspace/install/setup.bash" >> /root/.bashrc && \
+    echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /root/.bashrc && \
+    echo 'export PS1="\[\e[1;32m\][AgBot-Container]\[\e[0m\] \w \$ "' >> /root/.bashrc
 
-# 5. Resilient Runtime Install
-RUN for i in {1..5}; do \
-    apt-get update && \
-    apt-get install -y --no-install-recommends --fix-missing \
-    python3-pip python3-serial udev libasio-dev \
-    ros-humble-navigation2 \
-    ros-humble-ublox-gps \
-    ros-humble-tf-transformations \
-    ros-humble-rmw-cyclonedds-cpp && \
-    break || sleep 10; \
-    done && \
-    python3 -m pip install --no-cache-dir --upgrade pip && \
-    python3 -m pip install --no-cache-dir nicegui lizard transforms3d && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+CMD ["bash"]

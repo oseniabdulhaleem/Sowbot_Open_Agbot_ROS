@@ -6,7 +6,7 @@
 device: ""
 
 serial:
-  baudrate: 921600
+  baudrate: 115200
   hw_flow_control: "off"
 
 stream_device:

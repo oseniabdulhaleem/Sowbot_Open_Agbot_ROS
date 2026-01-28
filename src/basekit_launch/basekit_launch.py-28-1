@@ -1,4 +1,3 @@
-import os
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
@@ -10,9 +9,6 @@ def generate_launch_description():
     gps_port = LaunchConfiguration('gps_port')
     mcu_port = LaunchConfiguration('mcu_port')
     map_name = LaunchConfiguration('map_name')
-
-    # Path to the parameters file created on the host (mounted at /workspace)
-    nav2_params_path = os.path.join('/workspace', 'nav2_params.yaml')
 
     # 2. Nodes
     map_manager = Node(
@@ -28,21 +24,7 @@ def generate_launch_description():
         executable='controller_server',
         name='controller_server',
         output='screen',
-        # Loaded with critics and planner config from the YAML file
-        parameters=[nav2_params_path, {'use_sim_time': sim}]
-    )
-
-    # The supervisor that orchestrates the lifecycle transitions
-    lifecycle_manager = Node(
-        package='nav2_lifecycle_manager',
-        executable='lifecycle_manager',
-        name='lifecycle_manager_navigation',
-        output='screen',
-        parameters=[
-            {'use_sim_time': sim},
-            {'autostart': True},
-            {'node_names': ['controller_server']}
-        ]
+        parameters=[{'use_sim_time': sim}]
     )
 
     driver_node = Node(
@@ -71,10 +53,9 @@ def generate_launch_description():
         DeclareLaunchArgument('mcu_port', default_value='virtual'),
         DeclareLaunchArgument('map_name', default_value='agbot_field'),
         
-        # Execution List
+        # Launch everything
         map_manager,
         nav2_controller,
-        lifecycle_manager,
         driver_node,
         web_ui,
         topological_nav

@@ -4,7 +4,7 @@ import os, subprocess, time, curses, re
 # Configuration
 EXPECTED_NODES = ["/basekit_driver_node", "/ublox_gps_node", "/web_ui"]
 TARGET_TOPICS = {
-    "GPS Fix": "/gps/fix",
+    "GPS Fix": "/ublox_gps_node/fix",
     "Battery": "/battery_state",
     "Odometry": "/odom",
     "Motor Cmds": "/cmd_vel"

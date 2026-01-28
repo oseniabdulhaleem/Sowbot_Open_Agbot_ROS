@@ -2,52 +2,44 @@
 import subprocess
 import os
 import sys
-import signal
 import time
-import argparse
 
 # Configuration
 IMAGE_NAME = "openagbot:dev"
 CONTAINER_NAME = "open_agbot"
 
-def run_clean():
-    """Historical cleanup to manage ThinkPad storage limits."""
-    print("Purging docker build cache and unused containers...")
-    subprocess.run(["docker", "system", "prune", "-f"], check=False)
-    subprocess.run(["docker", "builder", "prune", "-af"], check=False)
-
 def run_build():
-    print("Cleaning old build artifacts...")
-    subprocess.run(['sudo', 'rm', '-rf', 'build/', 'install/', 'log/'], check=False)
+    """
+    Cleans up old container artifacts and builds the image fresh.
+    """
+    print("🧹 Removing old container cruft...")
+    subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
+    subprocess.run(["docker", "system", "prune", "-f"], capture_output=True)
     
-    print("Building Docker Image...")
-    # Using the standard Agroecology Lab Dockerfile location
-    subprocess.run(["docker", "build", "-t", IMAGE_NAME, "-f", "docker/Dockerfile", "."], check=True)
-
-    print("Syncing build artifacts to host (Sequential Mode)...")
-    # Mapping current user/group IDs prevents permission issues on the host
-    user_info = f"{os.getuid()}:{os.getgid()}"
-    
-    cmd_sync = [
-        "docker", "run", "--rm", 
-        "--user", user_info,
-        "-v", f"{os.getcwd()}:/workspace", 
-        "-w", "/workspace",
-        IMAGE_NAME, "bash", "-c", 
-        "source /opt/ros/humble/setup.bash && colcon build --symlink-install --executor sequential --parallel-workers 1"
+    print(f"🛠️ Building fresh image: {IMAGE_NAME}...")
+    # --no-cache ensures we don't reuse broken hybrid layers
+    cmd = [
+        "docker", "build", "--no-cache", 
+        "-t", IMAGE_NAME, 
+        "-f", "docker/Dockerfile", "."
     ]
-    subprocess.run(cmd_sync, check=True)
-    
-    # Post-build prune to save disk space on ThinkPad
-    subprocess.run(["docker", "builder", "prune", "-f"], check=False)
-    print("Build and Sync Complete.")
+    result = subprocess.run(cmd)
+    if result.returncode == 0:
+        print("✅ Build successful.")
+    else:
+        print("❌ Build failed.")
+    sys.exit(result.returncode)
 
 def run_runtime(extra_args):
+    """
+    Final Stable Runtime: Hardware discovery and ROS 2 Launch.
+    """
     # 1. Hardware Discovery
     if os.path.exists('fixusb.py'):
+        print("🔍 Running fixusb.py...")
         subprocess.run(['python3', 'fixusb.py'], check=True)
 
-    # 2. Load Detected Ports
+    # 2. Load Environment
     ports = {}
     if os.path.exists('.env'):
         with open('.env', 'r') as f:
@@ -59,24 +51,29 @@ def run_runtime(extra_args):
     gps_p = ports.get('GPS_PORT', 'virtual')
     mcu_p = ports.get('MCU_PORT', 'virtual')
     is_virtual = (gps_p == 'virtual' and mcu_p == 'virtual')
-    
-    # Cleanup previous instances
+
+    # 3. Cleanup & Prep
+    print("🧹 Cleaning up previous container...")
     subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
+    
+    if not is_virtual:
+        print(f"✅ Hardware | GPS: {gps_p} | MCU: {mcu_p}")
+        subprocess.run(['sudo', 'chmod', '666', gps_p, mcu_p], check=False)
+        
+        # Non-blocking MCU Wakeup (Prevents terminal hang)
+        print(f"🔋 Waking up MCU on {mcu_p}...")
+        os.system(f"stty -F {mcu_p} 115200 && (echo 's' > {mcu_p} &)")
+        time.sleep(0.2)
+    else:
+        print("🎮 Mode: Simulation")
 
-    # 3. Handle Simulation if Hardware is missing (Ghost Mode)
-    sim_proc = None
-    if is_virtual:
-        print("Mode: Simulation (Ghost)")
-        if os.path.exists('sim_lizard.sh'):
-            sim_proc = subprocess.Popen(['bash', 'sim_lizard.sh'], stdout=subprocess.DEVNULL, preexec_fn=os.setsid)
-            time.sleep(1)
-
+    # 4. ROS 2 Launch
     try:
-        pass_through_args = " ".join(extra_args)
+        # Filter out "build" or "up" from extra_args to prevent ROS malformed arg error
+        launch_args = [arg for arg in extra_args if ":=" in arg]
         sim_flag = "sim:=true" if is_virtual else "sim:=false"
         
-        print(f"Launching {CONTAINER_NAME} | GPS: {gps_p} | MCU: {mcu_p}")
-        
+        print(f"🚀 Launching {CONTAINER_NAME}...")
         cmd = [
             "docker", "run", "-it", "--rm", "--name", CONTAINER_NAME,
             "--net=host", "--privileged", "--env-file", ".env",
@@ -85,34 +82,18 @@ def run_runtime(extra_args):
             IMAGE_NAME, "bash", "-c",
             f"source /opt/ros/humble/setup.bash && source install/setup.bash && "
             f"ros2 launch basekit_launch basekit_launch.py {sim_flag} "
-            f"gps_port:={gps_p} mcu_port:={mcu_p} {pass_through_args}"
+            f"device:={gps_p} mcu_port:={mcu_p} {' '.join(launch_args)}"
         ]
         subprocess.run(cmd)
     except KeyboardInterrupt:
-        print("\nShutting down...")
-    finally:
-        if sim_proc:
-            # Kill the simulation process group
-            os.killpg(os.getpgid(sim_proc.pid), signal.SIGTERM)
+        print("\n🛑 Shutdown.")
 
 if __name__ == "__main__":
-    # Check for specific utility commands
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "build":
-            run_build()
-            sys.exit(0)
-        elif sys.argv[1] == "clean":
-            run_clean()
-            sys.exit(0)
-
-    # Default logic: Auto-build if install is missing, then run
-    if not os.path.exists('install/setup.bash'):
+    raw_args = sys.argv[1:]
+    
+    if "build" in raw_args:
         run_build()
     
-    # Pass any extra arguments (like --ros-args) to the runtime
-    # If the first arg was 'up', we skip it to avoid passing 'up' to ros2 launch
-    args_to_pass = sys.argv[1:]
-    if args_to_pass and args_to_pass[0] == "up":
-        args_to_pass = args_to_pass[1:]
-        
-    run_runtime(args_to_pass)
+    # Strip "up" if present
+    processed_args = [a for a in raw_args if a != "up"]
+    run_runtime(processed_args)

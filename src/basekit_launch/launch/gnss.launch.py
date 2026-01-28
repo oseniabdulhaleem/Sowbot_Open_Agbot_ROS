@@ -70,7 +70,7 @@ def generate_launch_description():
     # Create a modified configuration for automatepro_gnss_driver (ublox_gps)
     config = {
         'device': serial_port,
-        'uart1.baudrate': 921600,
+        'uart1.baudrate': 115200,
         'frame_id': 'gnss',
         'config_on_startup': False  # Recommended by Lemvos for pre-configured devices
     }
