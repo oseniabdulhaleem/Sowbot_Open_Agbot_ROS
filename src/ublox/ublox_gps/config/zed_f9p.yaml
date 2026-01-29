@@ -3,9 +3,9 @@ ublox_gps_node:
     # --- Hardware Connection ---
     # Uses the path found by fixusb.py in your .env
     device: ${GPS_PORT}
-    baudrate: 115200
+    baudrate: 460800
     uart1:
-      baudrate: 115200
+      baudrate: 460800
     frame_id: "gps"
     
     # --- Stability Settings ---

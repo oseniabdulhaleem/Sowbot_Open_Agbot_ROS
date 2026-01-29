@@ -1,81 +1,55 @@
 import os
+from ament_index_python.packages import get_package_share_directory, PackageNotFoundError
 from launch import LaunchDescription
-from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
 
 def generate_launch_description():
-    # 1. Configurations
-    sim = LaunchConfiguration('sim')
-    gps_port = LaunchConfiguration('gps_port')
-    mcu_port = LaunchConfiguration('mcu_port')
-    map_name = LaunchConfiguration('map_name')
+    ld = LaunchDescription()
 
-    # Path to the parameters file created on the host (mounted at /workspace)
-    nav2_params_path = os.path.join('/workspace', 'nav2_params.yaml')
+    # 1. Config Paths
+    try:
+        ublox_config = os.path.join(get_package_share_directory('ublox_gps'), 'config', 'zed_f9p.yaml')
+    except PackageNotFoundError:
+        ublox_config = ""
 
-    # 2. Nodes
-    map_manager = Node(
-        package="topological_navigation", 
-        executable="map_manager2.py", 
-        name="map_manager", 
-        arguments=['/workspace/maps/test_map.yaml'],
-        parameters=[{"tmap_file": "/workspace/maps/test_map.yaml"}]
-    )
-
-    nav2_controller = Node(
-        package='nav2_controller',
-        executable='controller_server',
-        name='controller_server',
+    # 2. Hardware Nodes (GPS & MCU)
+    gps_node = Node(
+        package='ublox_gps',
+        executable='ublox_gps_node',
+        name='ublox_gps_node',
         output='screen',
-        # Loaded with critics and planner config from the YAML file
-        parameters=[nav2_params_path, {'use_sim_time': sim}]
+        respawn=True,
+        parameters=[ublox_config, {
+            'device': LaunchConfiguration('gps_port', default='/dev/ttyACM0'),
+            'uart1.baudrate': 460800,
+            'meas_rate': 1000,
+            'tmode3': 0,
+        }]
     )
 
-    # The supervisor that orchestrates the lifecycle transitions
-    lifecycle_manager = Node(
-        package='nav2_lifecycle_manager',
-        executable='lifecycle_manager',
-        name='lifecycle_manager_navigation',
-        output='screen',
-        parameters=[
-            {'use_sim_time': sim},
-            {'autostart': True},
-            {'node_names': ['controller_server']}
-        ]
-    )
-
-    driver_node = Node(
+    mcu_node = Node(
         package='basekit_driver',
         executable='basekit_driver_node',
-        parameters=[{'use_sim_time': sim, 'gps_port': gps_port, 'mcu_port': mcu_port}]
+        name='basekit_driver_node',
+        parameters=[{'port': LaunchConfiguration('mcu_port', default='/dev/ttyACM1')}],
+        respawn=True
     )
 
-    web_ui = Node(
-        package='basekit_ui',
-        executable='basekit_ui_node',
-        parameters=[{'use_sim_time': sim}]
-    )
+    ld.add_action(gps_node)
+    ld.add_action(mcu_node)
 
-    topological_nav = Node(
-        package='topological_navigation',
-        executable='navigation2.py',
-        name='topological_navigation',
-        parameters=[{'map_name': map_name, 'use_sim_time': sim}],
-        output='screen'
-    )
+    # 3. Conditional Web UI Launch (Prevents the crash you just saw)
+    try:
+        rosbridge_dir = get_package_share_directory('rosbridge_server')
+        ld.add_action(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([os.path.join(rosbridge_dir, 'launch/rosbridge_websocket_launch.xml')])
+        ))
+        ld.add_action(Node(package='web_ui', executable='web_ui_node', name='web_ui_node'))
+        ld.add_action(LogInfo(msg="✅ Web UI and Bridge found and starting."))
+    except PackageNotFoundError:
+        ld.add_action(LogInfo(msg="⚠️ rosbridge_server not found. Web UI will be disabled, but hardware is starting!"))
 
-    return LaunchDescription([
-        DeclareLaunchArgument('sim', default_value='false'),
-        DeclareLaunchArgument('gps_port', default_value='virtual'),
-        DeclareLaunchArgument('mcu_port', default_value='virtual'),
-        DeclareLaunchArgument('map_name', default_value='agbot_field'),
-        
-        # Execution List
-        map_manager,
-        nav2_controller,
-        lifecycle_manager,
-        driver_node,
-        web_ui,
-        topological_nav
-    ])
+    return ld
