@@ -1,25 +1,30 @@
 import os
-from ament_index_python.packages import get_package_share_directory, PackageNotFoundError
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import LogInfo
 from launch_ros.actions import Node
 
 # --- VERSIONING ---
-VERSION = "5.4-STABLE"
+VERSION = "5.5-STABLE"
 
 def generate_launch_description():
     ld = LaunchDescription()
 
-    # 1. Environment & Config Logic
-    mode = os.environ.get('MODE', 'simulation').lower()
-    gps_port = os.environ.get('GPS_PORT', '/dev/ttyACM0')
-    mcu_port = os.environ.get('MCU_PORT', '/dev/ttyACM1')
-    is_sim = (mode == 'simulation')
+    # --- ENVIRONMENT FIXES ---
+    os.environ['LD_LIBRARY_PATH'] = os.environ.get('LD_LIBRARY_PATH', '') + ':/opt/ros/humble/lib'
+
+    # 1. Hardware Inference Logic
+    gps_port = os.environ.get('GPS_PORT', '/dev/ttyACM1')
+    mcu_port = os.environ.get('MCU_PORT', '/dev/ttyACM0')
+
+    is_hardware_present = os.path.exists(gps_port) and os.path.exists(mcu_port)
+    is_sim = not is_hardware_present
+    mode_label = "HARDWARE" if is_hardware_present else "SIMULATION"
 
     # Version Banner
     ld.add_action(LogInfo(msg="======================================================"))
     ld.add_action(LogInfo(msg=f"🚀 AGBOT MASTER LAUNCH V{VERSION}"))
-    ld.add_action(LogInfo(msg=f"🎮 MODE: {mode.upper()} | NAVIGATION STACK ACTIVE"))
+    ld.add_action(LogInfo(msg=f"🎮 MODE: {mode_label} | GPS: {gps_port}"))
     ld.add_action(LogInfo(msg="======================================================"))
 
     # 2. UI & Communication Bridge
@@ -35,15 +40,14 @@ def generate_launch_description():
         parameters=[{'use_sim_time': is_sim}]
     ))
 
-    # 3. Restored Navigation Stack (Matches Audit)
-    # Lifecycle Manager coordinates the state of controller and costmaps
+    # 3. Navigation Stack & Lifecycle Management
     ld.add_action(Node(
         package='nav2_lifecycle_manager', executable='lifecycle_manager',
         name='lifecycle_manager_navigation', output='screen',
         parameters=[{
             'use_sim_time': is_sim,
             'autostart': True,
-            'node_names': ['controller_server', 'local_costmap', 'costmap']
+            'node_names': ['controller_server', 'local_costmap']
         }]
     ))
 
@@ -55,38 +59,50 @@ def generate_launch_description():
 
     ld.add_action(Node(
         package='nav2_costmap_2d', executable='nav2_costmap_2d',
-        name='local_costmap', namespace='local_costmap',
-        output='screen', parameters=[{'use_sim_time': is_sim}]
+        name='local_costmap', # Removed redundant namespace for cleaner TF tree
+        output='screen', 
+        parameters=[{'use_sim_time': is_sim}]
     ))
 
-    # 4. Topological Navigation (From Commit a7232f5)
+    # 4. Topological Navigation
     ld.add_action(Node(
         package="topological_navigation", executable="map_manager2.py",
         name="map_manager", arguments=['/workspace/maps/test_map.yaml'],
         parameters=[{"tmap_file": "/workspace/maps/test_map.yaml"}]
     ))
 
-    ld.add_action(Node(
-        package='topological_navigation', executable='navigation2.py',
-        name='topological_navigation', output='screen',
-        parameters=[{'use_sim_time': is_sim, 'map_name': 'test_map'}]
-    ))
-
-    # 5. Conditional Hardware/Mock Drivers
-    if not is_sim:
+    # 5. Conditional Driver Loading
+    if is_hardware_present:
+        config_path = '/workspace/src/ublox/ublox_gps/config/zed_f9p.yaml'
+        
         ld.add_action(Node(
-            package='ublox_gps', executable='ublox_gps_node', name='ublox_gps_node',
-            parameters=[{'device': gps_port}], respawn=True
+            package='ublox_gps', 
+            executable='ublox_gps_node', 
+            name='ublox_gps_node', 
+            output='screen',
+            parameters=[
+                config_path, 
+                {
+                    'device': gps_port,
+                    'baudrate': 460800,
+                    'uart1.baudrate': 460800,
+                    'frame_id': 'gps',          # CRITICAL: Links data to the map
+                    'publish': {'nav': {'pvt': True}}, # Force position output
+                    'ubx': {'enabled': True},   # Force binary mode
+                    'meas_rate': 200,           # 5Hz updates
+                    'nav_rate': 1,              # Publish every measure
+                    'tmode3': 0,
+                    'config_on_startup': True
+                }
+            ],
+            respawn=True
         ))
+        
         ld.add_action(Node(
             package='basekit_driver', executable='basekit_driver_node', 
-            name='basekit_driver_node', parameters=[{'port': mcu_port}], respawn=True
+            name='basekit_driver_node', 
+            parameters=[{'port': mcu_port}], 
+            respawn=True
         ))
-    else:
-        # Launching driver in virtual mode to satisfy 'Battery' and 'Bumper' publishers
-        ld.add_action(Node(
-            package='basekit_driver', executable='basekit_driver_node',
-            name='basekit_driver_node', parameters=[{'use_sim_time': True, 'port': 'virtual'}]
-        ))
-
+    
     return ld
