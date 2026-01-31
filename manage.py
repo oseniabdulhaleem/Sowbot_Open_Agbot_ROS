@@ -34,16 +34,26 @@ def run_build(full=False):
     else:
         setup_cmd = "source /opt/ros/humble/setup.bash && source install/setup.bash"
 
-    # We use --entrypoint /bin/bash to stop the image from trying to source missing files on startup
+       
+    
+    # We use --entrypoint /bin/bash to STOP the image from 
+    # trying to source the missing install folder on startup.
     cmd_sync = [
         "docker", "run", "--rm", 
         "--user", user_info,
-        "--entrypoint", "/bin/bash",
+        "--entrypoint", "/bin/bash", # <--- ADD THIS LINE
         "-v", f"{os.getcwd()}:/workspace", 
         "-w", "/workspace",
-        IMAGE_NAME, "-c", 
+        IMAGE_NAME, "-c",            # <--- CHANGE "bash" TO "-c"
         f"{setup_cmd} && colcon build --symlink-install --executor sequential"
     ]
+    
+    
+    
+    
+    
+    
+    
     
     try:
         subprocess.run(cmd_sync, check=True)
@@ -51,6 +61,11 @@ def run_build(full=False):
     except subprocess.CalledProcessError as e:
         print(f"Build failed. If the error is 'No such file', check the Dockerfile ENTRYPOINT.")
         sys.exit(1)
+
+
+
+
+
 
 def run_runtime(extra_args):
     """
