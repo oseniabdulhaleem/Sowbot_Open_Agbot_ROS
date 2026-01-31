@@ -7,11 +7,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-c"]
 
 # 1. System Tools + ROS 2 Build-time & Runtime Deps
+# Added python3-serial and ros-humble-serial-driver for hardware communication
 RUN for i in {1..5}; do \
     apt-get update && \
     apt-get install -y --fix-missing --no-install-recommends \
     ca-certificates curl wget gnupg2 unzip git build-essential cmake \
     python3-pip python3-setuptools python3-colcon-common-extensions \
+    python3-serial \
     libunwind8 \
     libasio-dev libgeographic-dev net-tools iputils-ping htop nano \
     ros-humble-rmw-cyclonedds-cpp \
@@ -21,20 +23,22 @@ RUN for i in {1..5}; do \
     ros-humble-tf2-geometry-msgs ros-humble-tf-transformations \
     ros-humble-laser-geometry ros-humble-pcl-conversions ros-humble-nav2-common \
     ros-humble-twist-mux ros-humble-xacro ros-humble-ros2cli \
+    ros-humble-rosbridge-suite \
+    ros-humble-serial-driver \
     ros-humble-teleop-twist-keyboard && \
     apt-get install -f -y && \
     break || (sleep 10); \
     done
 
 # 2. MongoDB 6.0 Setup
-# Added a cleanup check before running update to ensure no broken states carry over
 RUN apt-get update && apt-get install -f -y && \
     curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server-6.0.gpg && \
     echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list && \
     apt-get update && apt-get install -y mongodb-org-server mongodb-org-shell
 
 # 3. Python Dependencies
-RUN pip3 install --no-cache-dir nicegui lizard transforms3d pymongo
+# Added pyserial for direct MCU interaction scripts
+RUN pip3 install --no-cache-dir nicegui lizard transforms3d pymongo pyserial
 
 # 4. Lizard Firmware Prep
 RUN mkdir -p /opt/lizard && cd /tmp && \
@@ -55,14 +59,14 @@ RUN . /opt/ros/humble/setup.sh && \
     colcon build --symlink-install --executor sequential --event-handlers console_direct+
 
 # ==========================================
-# STAGE 3: runtime (The Light Build Target)
+# STAGE 3: runtime (The Final Target)
 # ==========================================
 FROM env-base AS runtime
 WORKDIR /workspace
 
-# Fix for UndefinedVar: Use curly braces for PYTHONPATH
+# Fixed UndefinedVar warning by setting a clean base PYTHONPATH
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-ENV PYTHONPATH="/workspace/install/lib/python3.10/site-packages:/opt/ros/humble/lib/python3.10/site-packages:${PYTHONPATH}"
+ENV PYTHONPATH="/workspace/install/lib/python3.10/site-packages:/opt/ros/humble/lib/python3.10/site-packages"
 ENV LD_LIBRARY_PATH="/workspace/install/lib:/opt/ros/humble/lib:/usr/local/lib"
 
 # Transfer Build Artifacts
@@ -74,10 +78,11 @@ RUN echo "/workspace/install/lib" > /etc/ld.so.conf.d/agbot_final.conf && \
     echo "/opt/ros/humble/lib" >> /etc/ld.so.conf.d/agbot_final.conf && \
     ldconfig
 
-# Quality of Life + Auto-Sourcing
+# Quality of Life + Auto-Sourcing for interactive shells
 RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
-    echo "source /workspace/install/setup.bash" >> /root/.bashrc
+    echo "[ -f /workspace/install/setup.bash ] && source /workspace/install/setup.bash" >> /root/.bashrc
 
-# Entrypoint to ensure environment is active for ROS commands
-ENTRYPOINT ["/bin/bash", "-c", "source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash && exec \"$@\"", "--"]
+# Robust Entrypoint: Only sources install/setup.bash if it actually exists
+# This prevents the crash during the manage.py build/sync phase
+ENTRYPOINT ["/bin/bash", "-c", "source /opt/ros/humble/setup.bash && [ -f /workspace/install/setup.bash ] && source /workspace/install/setup.bash; exec \"$@\"", "--"]
 CMD ["bash"]

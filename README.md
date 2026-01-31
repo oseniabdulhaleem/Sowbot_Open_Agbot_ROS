@@ -5,7 +5,7 @@ An open-source, containerised ROS 2 stack for autonomous agricultural robotics. 
 Development is led by the <a href="https://agroecologylab.org.uk" target="_blank">Agroecology Lab </a> building on the core developed by <a href="https://github.com/zauberzeug/" target="_blank">Zauberzeug</a> 
 
 
-(Latest work with Topological Nav is in the /dev branch, but under heavy development)
+This /dev branch, is under heavy development and may be broken at any given moment, for a somewhat stable but less feature complete version check out the /main branch.
 
 
 ## Quick Start
